@@ -2,7 +2,7 @@
 
 公開ドキュメントと、README に貼る画像の置き場。
 
-ここの Markdown はそのまま [説明書サイト](https://kenta3578.github.io/sarari/)（VitePress・GitHub Pages）になる。設定は `.vitepress/config.mts`、手元で見るのは `pnpm docs:dev`。
+使う人向けの Markdown（説明書・更新履歴・プライバシー）は [説明書サイト](https://kenta3578.github.io/sarari/)（VitePress・GitHub Pages）になる。コードを読む人向けの文書はサイトに出さず、GitHub 上で読む（`srcExclude`）。設定は `.vitepress/config.mts`、手元で見るのは `pnpm docs:dev`。
 
 | ファイル | 読む人 | 中身 |
 |---|---|---|
