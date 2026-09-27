@@ -45,8 +45,8 @@ open sarari.xcodeproj   # Signing & Capabilities で自分の Personal Team を�
 ## 使い方
 
 1. 入力したい場所にカーソルを置く
-2. 右 ⌥ を押して話す（開始音が鳴る）
-3. もう一度右 ⌥ を押す（停止音が鳴り、カーソル位置に文字が入る）
+2. 録音キー（最初は右 ⌥。設定で変えられる）を押して話す（開始音が鳴る）
+3. もう一度録音キーを押す（停止音が鳴り、カーソル位置に文字が入る）
 
 設定の全体と「やりたいこと → どこを触る」は [説明書](https://kenta3578.github.io/sarari/manual)（[Markdown](docs/MANUAL.md)）に、何が変わったかは [更新履歴](https://kenta3578.github.io/sarari/changelog) にあります。
 
