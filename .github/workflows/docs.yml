@@ -1,10 +1,10 @@
 # 説明書サイト（docs/ → VitePress）を GitHub Pages に出す。
-# PR ではビルドだけ通してリンク切れを止め、develop に入ったら公開する。
+# PR ではビルドだけ通してリンク切れを止め、main に入ったら公開する（説明書は他人に渡した版と揃える）。
 name: docs
 
 on:
   push:
-    branches: [develop]
+    branches: [main]
     paths: ['docs/**', 'package.json', 'pnpm-lock.yaml', '.github/workflows/docs.yml']
   pull_request:
     paths: ['docs/**', 'package.json', 'pnpm-lock.yaml', '.github/workflows/docs.yml']
