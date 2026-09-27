@@ -4,7 +4,7 @@ layout: home
 hero:
   name: sarari
   text: さらり
-  tagline: 完全ローカルで動く、Mac 用の日本語音声入力アプリ。右 ⌥ を押して話し、もう一度押すと、カーソル位置に文字が入ります。
+  tagline: 完全ローカルで動く、Mac 用の日本語音声入力アプリ。録音キー（最初は右 ⌥・変更可）を押して話し、もう一度押すと、カーソル位置に文字が入ります。
   actions:
     - theme: brand
       text: 説明書を読む
@@ -35,12 +35,12 @@ features:
   <div class="flow-step">
     <img class="light-only" src="./screens/hud-recording.png" alt="録音中の HUD。すみれ色の棒が声で伸び縮みする"><img class="dark-only" src="./screens/hud-recording-dark.png" alt="録音中の HUD。すみれ色の棒が声で伸び縮みする">
     <span class="num">1</span>
-    <p>文字を入れたい場所にカーソルを置いて、<b>右 ⌥</b> を押して話す。画面下の棒が声に合わせて動きます</p>
+    <p>文字を入れたい場所にカーソルを置いて、<b>録音キー</b>（最初は右 ⌥）を押して話す。画面下の棒が声に合わせて動きます</p>
   </div>
   <div class="flow-step">
     <img class="light-only" src="./screens/hud-processing.png" alt="文字起こし中の HUD。水色の波形で止まる"><img class="dark-only" src="./screens/hud-processing-dark.png" alt="文字起こし中の HUD。水色の波形で止まる">
     <span class="num">2</span>
-    <p>話し終えたら、もう一度 <b>右 ⌥</b>。棒が水色で止まり、文字起こしが始まります</p>
+    <p>話し終えたら、もう一度 <b>録音キー</b>。棒が水色で止まり、文字起こしが始まります</p>
   </div>
   <div class="flow-step">
     <img class="light-only" src="./screens/hud-done.png" alt="挿入できた HUD。緑の点"><img class="dark-only" src="./screens/hud-done-dark.png" alt="挿入できた HUD。緑の点">
