@@ -1,4 +1,4 @@
-# Web の言葉で読む koemakase（Swift / SwiftUI / macOS）
+# Web の言葉で読む sarari（Swift / SwiftUI / macOS）
 
 **想定読者**: Vue / Nuxt・React / Next.js・TypeScript・Node.js は書けるが、Swift と macOS アプリは初めて、という人。
 
@@ -10,7 +10,7 @@
 
 **画面を持たない常駐プロセス＋小さな UI** です。Web に例えると、ブラウザのタブではなく「常駐している Node のプロセス」に近い。
 
-| koemakase | Web でいうと |
+| sarari | Web でいうと |
 |---|---|
 | メニューバー常駐（Dock に出ない） | 画面を持たない常駐プロセス。UI は右上の小さなメニューだけ |
 | グローバルホットキー（右 ⌥） | OS 全体のキーイベントを購読する。ブラウザの `keydown` と違い、**他アプリの上でも拾う** |
@@ -21,7 +21,7 @@
 ### 起動してから待機に入るまで
 
 ```
-koemakaseApp.swift   @main（アプリの入口。Web でいう main.ts / _app.tsx）
+sarariApp.swift   @main（アプリの入口。Web でいう main.ts / _app.tsx）
   └ MenuBarExtra           メニューバーの常駐 UI を宣言
   └ AppDelegate            起動完了を受け取り、
       └ AppController.start()   監視・権限・エンジンを立ち上げる（以後ここが司令塔）
@@ -52,7 +52,7 @@ koemakaseApp.swift   @main（アプリの入口。Web でいう main.ts / _app.t
 
 | ファイル | 中身 | Web でいうと |
 |---|---|---|
-| `koemakaseApp.swift` | `@main`。メニューバー UI の宣言と起動フック | `main.ts` ＋ ルートコンポーネント |
+| `sarariApp.swift` | `@main`。メニューバー UI の宣言と起動フック | `main.ts` ＋ ルートコンポーネント |
 | `AppController.swift` | 全体の司令塔。録音開始/停止、パイプライン起動、各所の接続 | アプリのサービス層・オーケストレータ |
 | `DictationPipeline.swift` | 「音声サンプル → 挿入するテキスト」の純粋な処理 | 副作用のない純関数モジュール |
 | `PipelineGuard.swift` | 録音の世代番号。古い結果が新しい発話を壊さないようにする | リクエストの competing 対策（最新以外を捨てる） |
@@ -167,7 +167,7 @@ koemakaseApp.swift   @main（アプリの入口。Web でいう main.ts / _app.t
 
 ## 6. ツールの対比
 
-| 目的 | Web | koemakase |
+| 目的 | Web | sarari |
 |---|---|---|
 | 依存管理 | `package.json` / `package-lock.json` | Swift Package Manager / `Package.resolved` |
 | プロジェクト設定 | `vite.config.ts` など | `project.yml` → **XcodeGen が `.xcodeproj` を生成**（生成物は git 管理外） |
@@ -183,7 +183,7 @@ koemakaseApp.swift   @main（アプリの入口。Web でいう main.ts / _app.t
 
 ## 7. 読む順番（この順に読むと繋がる）
 
-1. **`koemakaseApp.swift`**（56 行）— 入口。どこから始まるか
+1. **`sarariApp.swift`**（56 行）— 入口。どこから始まるか
 2. **`AppState.swift`**（293 行）— 7 つの状態。この enum が UI 全体を決める
 3. **`AppController.swift`**（420 行）— 司令塔。1 回の口述の流れが全部ここに書いてある
 4. **`TextInjector.swift`**（545 行）— このアプリで**最も判断が多い場所**。「成功したと言い切れるか」の扱い

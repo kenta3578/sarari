@@ -7,7 +7,7 @@
 #
 # 目標値はリポジトリに持たない（判断の基準は手元の非公開メモで管理する）。
 #
-# 読むのは ~/koemakase/history/<timestamp>/meta.json だけ（アプリ側には触らない）。
+# 読むのは ~/sarari/history/<timestamp>/meta.json だけ（アプリ側には触らない）。
 # 生テキスト 10 文字未満は「テスト入力」として KPI から除く。
 set -euo pipefail
 
@@ -24,7 +24,7 @@ if "--target" in args:
 
 MIN_CHARS = 10          # これ未満はテスト入力（「あいうえお」級）として除外
 
-root = os.path.expanduser("~/koemakase/history")
+root = os.path.expanduser("~/sarari/history")
 files = sorted(glob.glob(os.path.join(root, "*", "meta.json")))
 
 per_day = collections.defaultdict(lambda: {"all": 0, "kpi": 0, "lens": []})
@@ -79,5 +79,5 @@ print()
 if target is not None:
     print(f"目標: 平日 {target} 回以上 → 達成 {achieved} / 平日 {weekday_count} 日（直近 {days} 日）")
 if total_all == 0:
-    print("履歴がありません（~/koemakase/history が空）。")
+    print("履歴がありません（~/sarari/history が空）。")
 PY

@@ -1,6 +1,6 @@
 import AppKit
 import Testing
-@testable import koemakase
+@testable import sarari
 
 /// 修飾キーの押下判定（Issue #78 / #115 / #120）。NSEvent を作らず flags の生値だけで組む。
 struct HotKeyJudgeTests {

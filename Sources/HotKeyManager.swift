@@ -183,7 +183,7 @@ final class HotKeyManager {
             CGEvent.tapEnable(tap: tap, enable: true)
             CFRunLoopRun()
         }
-        thread.name = "koemakase.hotkey-tap"
+        thread.name = "sarari.hotkey-tap"
         thread.qualityOfService = .userInteractive
         tapThread = thread
         thread.start()

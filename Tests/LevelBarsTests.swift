@@ -1,6 +1,6 @@
 import Testing
 import SwiftUI
-@testable import koemakase
+@testable import sarari
 
 /// 最小表示の «棒»（Issue #180、30 案の 14。#189 で 7 本、#191 で 10 本、#193 で 7 本へ）。
 ///

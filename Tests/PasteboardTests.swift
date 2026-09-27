@@ -1,6 +1,6 @@
 import AppKit
 import Testing
-@testable import koemakase
+@testable import sarari
 
 /// クリップボードの機密マーカーと、全 type の退避／復元（Issue #79）。
 /// `NSPasteboard.general` は触らず、テスト専用の名前付きペーストボードを使う。
@@ -10,7 +10,7 @@ import Testing
 struct PasteboardTests {
 
     private func withPasteboard(_ body: (NSPasteboard) -> Void) {
-        let pb = NSPasteboard(name: NSPasteboard.Name("koemakase.tests.\(UUID().uuidString)"))
+        let pb = NSPasteboard(name: NSPasteboard.Name("sarari.tests.\(UUID().uuidString)"))
         defer { pb.releaseGlobally() }
         pb.clearContents()
         body(pb)

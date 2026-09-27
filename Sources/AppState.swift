@@ -90,8 +90,8 @@ enum AppStatus: Equatable {
         switch self {
         case .loadingModel: return .systemYellow
         case .idle:         return nil
-        case .recording:    return .systemRed
-        case .processing:   return .systemBlue
+        case .recording:    return StatusPalette.recording
+        case .processing:   return StatusPalette.processing
         case .done:         return .systemGreen
         case .warned:       return .systemYellow
         case .failed:       return .systemOrange
@@ -101,13 +101,13 @@ enum AppStatus: Equatable {
     /// VoiceOver 用の説明（色・形状が読めない環境向けの3つ目の手がかり）。
     var accessibilityLabel: String {
         switch self {
-        case .loadingModel: return "koemakase: モデル読み込み中"
-        case .idle:         return "koemakase: 待機中"
-        case .recording:    return "koemakase: 録音中"
-        case .processing:   return "koemakase: 文字起こし中"
-        case .done:         return "koemakase: 完了"
-        case .warned:       return "koemakase: 完了（注意あり）"
-        case .failed:       return "koemakase: エラー"
+        case .loadingModel: return "sarari: モデル読み込み中"
+        case .idle:         return "sarari: 待機中"
+        case .recording:    return "sarari: 録音中"
+        case .processing:   return "sarari: 文字起こし中"
+        case .done:         return "sarari: 完了"
+        case .warned:       return "sarari: 完了（注意あり）"
+        case .failed:       return "sarari: エラー"
         }
     }
 
@@ -153,6 +153,34 @@ enum AppStatus: Equatable {
     }
 }
 
+/// 録音中・文字起こし中の色（Issue #48）。
+///
+/// 以前はシステムの赤・青だった。画面の縁を一周光らせると赤は警報に見えるので、
+/// 録音中をすみれ、文字起こし中を水色に替えた。メニューバー・HUD・縁の光はここから引く。
+/// 完了の緑・警告の黄・失敗の橙はシステム色のまま（意味が定着している）。
+enum StatusPalette {
+    static let recording = dynamic(light: 0x7C5CF0, dark: 0x9D85FF)
+    static let processing = dynamic(light: 0x1E9BE0, dark: 0x45B8F5)
+
+    /// 画面の縁の光。壁紙の上に重ねるので明暗に追従させず、淡い側に固定する。
+    static let glowRecording = rgb(0x9D85FF)
+    static let glowProcessing = rgb(0x45B8F5)
+    /// 完了は白く一瞬光って消える（緑を画面一周に出すと «成功» が強すぎる）。
+    static let glowDone = rgb(0xF2F4FF)
+
+    private static func dynamic(light: UInt32, dark: UInt32) -> NSColor {
+        NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? rgb(dark) : rgb(light)
+        }
+    }
+
+    private static func rgb(_ hex: UInt32) -> NSColor {
+        NSColor(srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
+                green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
+    }
+}
+
 /// メニューバー用の独自グリフ。吹き出しの中に3本の波形バー（＝声が文になる）。
 ///
 /// Core Graphics で描く（画像アセットを持たない。Retina でも滲まない）。
@@ -172,10 +200,10 @@ enum MenuBarGlyph {
         return image
     }
 
-    /// 録音中: 赤の塗りでバーを抜いた画像。
+    /// 録音中: すみれ色の塗りでバーを抜いた画像。
     static func recording(label: String) -> NSImage {
         let image = NSImage(size: size, flipped: false) { rect in
-            draw(in: rect, filled: true, color: .systemRed)
+            draw(in: rect, filled: true, color: StatusPalette.recording)
             return true
         }
         image.isTemplate = false

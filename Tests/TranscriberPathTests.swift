@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import koemakase
+@testable import sarari
 
 /// モデルの保存先（Issue #23）。**書類フォルダに置くと、壊れたときアプリが直せない。**
 struct TranscriberPathTests {

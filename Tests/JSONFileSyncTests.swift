@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import koemakase
+@testable import sarari
 
 /// 設定ファイルを外で編集したときの読み直しと、外の編集を踏まない書き込み（Issue #7）。
 /// 監視（DispatchSource）自体は実機で確かめる。ここは読み書きの判定だけ。
@@ -12,7 +12,7 @@ struct JSONFileSyncTests {
     }
 
     private let url: URL = FileManager.default.temporaryDirectory
-        .appendingPathComponent("koemakase-tests-\(UUID().uuidString)", isDirectory: true)
+        .appendingPathComponent("sarari-tests-\(UUID().uuidString)", isDirectory: true)
         .appendingPathComponent("sample.json")
 
     private func writeExternally(_ text: String) throws {

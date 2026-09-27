@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import koemakase
+@testable import sarari
 
 /// フィラー除去（Issue #59 / #82）。消しすぎはそのままカーソルに入るので「残す」側を重点的に見る。
 struct FillerRemoverTests {

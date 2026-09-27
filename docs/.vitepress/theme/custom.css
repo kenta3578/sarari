@@ -1,0 +1,54 @@
+/*
+ * 画面の画像はライト・ダークの 2 枚を並べて置き、サイトの外観に合わせて片方だけ出す（Issue #56）。
+ * GitHub で Markdown を開いたときは src の #gh-light-mode-only / #gh-dark-mode-only が同じ役をする。
+ */
+html:not(.dark) .dark-only,
+html.dark .light-only {
+  /* 下の img.shot の display に負けないよう優先させる */
+  display: none !important;
+}
+
+.vp-doc img.shot {
+  display: inline-block;
+  margin: 8px 0;
+}
+
+/* 設定ウィンドウは影の代わりに細い枠で背景から切り離す */
+.vp-doc img.window {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+}
+
+/* トップページの「使い方」。HUD の実物を 3 段で並べる */
+.flow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 24px 0 8px;
+}
+
+.flow-step {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  background: var(--vp-c-bg-soft);
+  padding: 16px;
+}
+
+.flow-step img {
+  display: block;
+  width: 100%;
+  max-width: 280px;
+  margin: 0 auto 12px;
+  border-radius: 8px;
+}
+
+.flow-step .num {
+  color: var(--vp-c-text-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.flow-step p {
+  margin: 4px 0 0;
+  line-height: 1.6;
+}

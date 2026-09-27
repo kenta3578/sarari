@@ -1,6 +1,6 @@
 # 設計の根拠
 
-koemakase がなぜこの形なのか。コードのコメントから参照される、判断の理由だけを置く。
+sarari がなぜこの形なのか。コードのコメントから参照される、判断の理由だけを置く。
 
 調査の一次データ（競合の価格・機能の棚卸し・実測ログ）は公開対象ではないので `local_docs/` にある。ここに残すのは「その調査から何を決めたか」だけ。
 
@@ -14,7 +14,7 @@ koemakase がなぜこの形なのか。コードのコメントから参照さ�
 音声 → [音声認識] 文字起こし → [整形] 書き換え → 挿入
 ```
 
-この分け方自体は一般的で、有償のディクテーションアプリもほぼ同じ構造を取っている。koemakase が違うのは**両方をローカルに置くこと**と、**整形を既定で OFF にしていること**。
+この分け方自体は一般的で、有償のディクテーションアプリもほぼ同じ構造を取っている。sarari が違うのは**両方をローカルに置くこと**と、**整形を既定で OFF にしていること**。
 
 整形は体感品質を大きく上げるが、後述のとおり事実を書き換えるリスクを持つ。既定を OFF にして、必要な人だけが ON にする構成にしてある。
 
@@ -105,6 +105,6 @@ Accessibility API では、挿入先の変化を読めないアプリがある�
 
 同じ方向のアプリはすでに多い。英語圏なら [VoiceInk](https://github.com/Beingpax/VoiceInk) や [Handy](https://github.com/cjpais/Handy)、日本語でも macOS 26 の SpeechAnalyzer を使ったものが同じ時期に何本も出ている（[nobetsu](https://github.com/pochang6/nobetsu)、[vox](https://github.com/MizuRyu/vox)、[whisperkun](https://github.com/m-tkg/whisperkun) など）。
 
-機能の数ではどれも koemakase より多い。整形や、話した端から文字が出る表示が欲しいなら、そちらのほうが合う。Windows や Linux なら Handy が対応している。
+機能の数ではどれも sarari より多い。整形や、話した端から文字が出る表示が欲しいなら、そちらのほうが合う。Windows や Linux なら Handy が対応している。
 
-koemakase は、音声入力の「入り口と出口」をどこまで削れるかを、自分の毎日の入力で確かめる場所として続けている。作った経緯は [Zenn の記事](https://zenn.dev/ken_ken_ken/articles/dictation-without-llm) に書いた。
+sarari は、音声入力の「入り口と出口」をどこまで削れるかを、自分の毎日の入力で確かめる場所として続けている。作った経緯は [Zenn の記事](https://zenn.dev/ken_ken_ken/articles/dictation-without-llm) に書いた。

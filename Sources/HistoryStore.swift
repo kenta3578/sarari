@@ -102,7 +102,7 @@ enum HistoryFiles {
     /// 一覧に読み込む上限。古いものは削除されるまでディスクには残る。
     static let listLimit = 500
 
-    /// `~/koemakase/history`。sandbox OFF 前提で実ホーム直下に置く（replacements.json と同じ場所）。
+    /// `~/sarari/history`。sandbox OFF 前提で実ホーム直下に置く（replacements.json と同じ場所）。
     static var rootURL: URL {
         DataDirectory.url
             .appendingPathComponent("history", isDirectory: true)
@@ -143,7 +143,7 @@ enum HistoryFiles {
 
     // MARK: - 書き出し
 
-    /// 1発話ぶんを `~/koemakase/history/<timestamp>/meta.json` に書き出す。
+    /// 1発話ぶんを `~/sarari/history/<timestamp>/meta.json` に書き出す。
     /// 録音した音声は残さない（Issue #4。声は履歴の中で最も機微で、使い道も無かった）。
     static func write(_ entry: HistoryEntry) throws -> HistoryEntry {
         let dir = directoryURL(for: entry.id)
@@ -155,7 +155,7 @@ enum HistoryFiles {
     /// 履歴のディレクトリに使う権限。
     ///
     /// 既定（0755）のままだと、マルチユーザーの Mac で他アカウントから発話の全文と
-    /// 音声を読める。`~/koemakase` は Desktop や Documents と違い TCC の保護対象外（Issue #81）。
+    /// 音声を読める。`~/sarari` は Desktop や Documents と違い TCC の保護対象外（Issue #81）。
     /// `[FileAttributeKey: Any]` は Sendable でないので `static let` だと共有された可変状態に見える。
     /// 呼ぶたびに作れば渡す先はローカルの値だけになる（生成コストは無視できる）。
     private static var privateAttributes: [FileAttributeKey: Any] { [.posixPermissions: 0o700] }

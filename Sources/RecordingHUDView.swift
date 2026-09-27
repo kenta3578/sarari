@@ -356,7 +356,7 @@ struct LevelBarsView: View {
             ForEach(heights.indices, id: \.self) { index in
                 Capsule(style: .continuous)
                     .fill(color)
-                    // 赤の上に灰を重ねる＝赤と灰を混ぜた色。システム色なので明暗に追従する。
+                    // 録音色の上に灰を重ねる＝2 色を混ぜた色。どちらも明暗に追従する。
                     .overlay(Capsule(style: .continuous).fill(Color(nsColor: .systemGray).opacity(muting)))
                     .frame(width: Self.barWidth, height: heights[index])
             }

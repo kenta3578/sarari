@@ -27,7 +27,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
         let hosting = NSHostingController(rootView: SettingsView())
         let window = NSWindow(contentViewController: hosting)
-        window.title = "koemakase 設定"
+        window.title = "sarari 設定"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         // 閉じても解放しない（次に開くときに同じウィンドウを使う）。
         window.isReleasedWhenClosed = false

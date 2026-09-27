@@ -8,7 +8,7 @@
 - 各構成 1回ずつ（D のみ2回）。**自然発話なので毎回まったく同じ音声ではない**。ミリ秒の差を厳密比較する精度はないが、桁の違いは十分読める
 - 発話内容（数値・日付・URL・メール・意味反転しやすい表現を1文に詰めたもの）:
   > 請求額が4,217円で、期日は3月14日です。詳細は example.com/invoice を見てください。連絡先は support@example.com です。**メールをチェックする前に**振り込みをお願いします。
-- 一次データ: `~/koemakase/history/<timestamp>/meta.json`（`speechEngine` / `formattingEngine` / `durations` / `rawText` / `formattedText` / `diff`）
+- 一次データ: `~/sarari/history/<timestamp>/meta.json`（`speechEngine` / `formattingEngine` / `durations` / `rawText` / `formattedText` / `diff`）
 
 ## 結果
 

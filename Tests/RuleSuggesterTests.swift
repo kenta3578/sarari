@@ -1,5 +1,5 @@
 import Testing
-@testable import koemakase
+@testable import sarari
 
 /// 辞書置換の候補（Issue #40）。別の語を候補にしない側（ポスト→テスト 等）を重点的に見る。
 struct RuleSuggesterTests {

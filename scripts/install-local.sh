@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# koemakase をローカルにビルドして /Applications へインストールする。
+# sarari をローカルにビルドして /Applications へインストールする。
 #
 # アドホック署名（xcodebuild の既定）だと**ビルドのたびに署名が変わる**ため、
 # macOS はそれを別のアプリと見なし、アクセシビリティ権限が毎回リセットされる。
@@ -9,11 +9,11 @@
 # 証明書の作り方は BUILD.md の「開発用の署名を固定する」を参照。
 set -euo pipefail
 
-IDENTITY="${KOEMAKASE_SIGN_IDENTITY:-koebun-dev}"
-CONFIG="${KOEMAKASE_CONFIG:-Release}"
-APP_DEST="/Applications/koemakase.app"
+IDENTITY="${SARARI_SIGN_IDENTITY:-koebun-dev}"
+CONFIG="${SARARI_CONFIG:-Release}"
+APP_DEST="/Applications/sarari.app"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DERIVED="${KOEMAKASE_DERIVED_DATA:-$REPO_ROOT/.build/dd}"
+DERIVED="${SARARI_DERIVED_DATA:-$REPO_ROOT/.build/dd}"
 
 cd "$REPO_ROOT"
 
@@ -21,10 +21,10 @@ echo "==> プロジェクトを生成"
 xcodegen generate >/dev/null
 
 echo "==> ビルド ($CONFIG)"
-xcodebuild -project koemakase.xcodeproj -scheme koemakase -configuration "$CONFIG" \
+xcodebuild -project sarari.xcodeproj -scheme sarari -configuration "$CONFIG" \
   -derivedDataPath "$DERIVED" -destination 'platform=macOS' build >/dev/null
 
-APP_SRC="$DERIVED/Build/Products/$CONFIG/koemakase.app"
+APP_SRC="$DERIVED/Build/Products/$CONFIG/sarari.app"
 [ -d "$APP_SRC" ] || { echo "ビルド成果物が見つからない: $APP_SRC" >&2; exit 1; }
 
 if security find-certificate -c "$IDENTITY" >/dev/null 2>&1; then
@@ -39,16 +39,17 @@ else
   echo "==> $IDENTITY が無いのでアドホック署名のまま（起動のたびに権限を取り直す必要あり）"
 fi
 
-echo "==> 起動中の koemakase を終了"
-osascript -e 'tell application "koemakase" to quit' 2>/dev/null || true
-# 旧名 koebun のときの本体（Issue #43）。Bundle ID が同じなので、残すと 2 つ常駐して取り合う。
-LEGACY_APP="/Applications/koebun.app"
-if [ -d "$LEGACY_APP" ]; then
-  echo "==> 旧名の $LEGACY_APP を終了して削除"
-  osascript -e "tell application \"$LEGACY_APP\" to quit" 2>/dev/null || true
-  sleep 1
-  rm -rf "$LEGACY_APP"
-fi
+echo "==> 起動中の sarari を終了"
+osascript -e 'tell application "sarari" to quit' 2>/dev/null || true
+# 旧名 koebun（Issue #43）・koemakase（Issue #54）のときの本体。Bundle ID が同じなので、残すと 2 つ常駐して取り合う。
+for LEGACY_APP in /Applications/koemakase.app /Applications/koebun.app; do
+  if [ -d "$LEGACY_APP" ]; then
+    echo "==> 旧名の $LEGACY_APP を終了して削除"
+    osascript -e "tell application \"$LEGACY_APP\" to quit" 2>/dev/null || true
+    sleep 1
+    rm -rf "$LEGACY_APP"
+  fi
+done
 sleep 1
 
 echo "==> $APP_DEST へインストール"

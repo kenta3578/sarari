@@ -1,13 +1,13 @@
 import Foundation
 import Testing
-@testable import koemakase
+@testable import sarari
 
-/// 旧名の置き場 `~/koebun` からの移行（Issue #43）。辞書・履歴を失わないことを見る。
+/// 旧名の置き場 `~/koebun`（Issue #43）・`~/koemakase`（Issue #54）からの移行。辞書・履歴を失わないことを見る。
 struct DataDirectoryTests {
 
     private func withHome(_ body: (URL) throws -> Void) throws {
         let home = FileManager.default.temporaryDirectory
-            .appendingPathComponent("koemakase-tests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("sarari-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: home) }
         try body(home)
@@ -24,7 +24,7 @@ struct DataDirectoryTests {
 
             #expect(!FileManager.default.fileExists(atPath: legacy.path))
             #expect(FileManager.default.fileExists(
-                atPath: home.appendingPathComponent("koemakase/replacements.json").path))
+                atPath: home.appendingPathComponent("sarari/replacements.json").path))
         }
     }
 
@@ -32,7 +32,7 @@ struct DataDirectoryTests {
     func keepsCurrent() throws {
         try withHome { home in
             let legacy = home.appendingPathComponent("koebun")
-            let current = home.appendingPathComponent("koemakase")
+            let current = home.appendingPathComponent("sarari")
             try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(at: current, withIntermediateDirectories: true)
 
@@ -40,6 +40,39 @@ struct DataDirectoryTests {
 
             #expect(FileManager.default.fileExists(atPath: legacy.path))
             #expect(FileManager.default.fileExists(atPath: current.path))
+        }
+    }
+
+    @Test("直前の名前 koemakase の置き場も移す（Issue #54）")
+    func movesPreviousName() throws {
+        try withHome { home in
+            let legacy = home.appendingPathComponent("koemakase")
+            try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
+            try Data("[]".utf8).write(to: legacy.appendingPathComponent("replacements.json"))
+
+            DataDirectory.migrateIfNeeded(home: home)
+
+            #expect(!FileManager.default.fileExists(atPath: legacy.path))
+            #expect(FileManager.default.fileExists(
+                atPath: home.appendingPathComponent("sarari/replacements.json").path))
+        }
+    }
+
+    @Test("旧名の置き場が2つあれば新しい名前の方を移し、古い方は触らない")
+    func prefersNewestLegacy() throws {
+        try withHome { home in
+            let older = home.appendingPathComponent("koebun")
+            let newer = home.appendingPathComponent("koemakase")
+            try FileManager.default.createDirectory(at: older, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: newer, withIntermediateDirectories: true)
+            try Data("newer".utf8).write(to: newer.appendingPathComponent("marker"))
+
+            DataDirectory.migrateIfNeeded(home: home)
+
+            #expect(FileManager.default.fileExists(atPath: older.path))
+            #expect(!FileManager.default.fileExists(atPath: newer.path))
+            #expect(FileManager.default.fileExists(
+                atPath: home.appendingPathComponent("sarari/marker").path))
         }
     }
 }

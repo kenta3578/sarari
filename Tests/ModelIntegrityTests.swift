@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 import Testing
-@testable import koemakase
+@testable import sarari
 
 /// モデル重みの照合（Issue #106）。**実モデル（約630MB）は使わない。**
 /// 一時ディレクトリに小さなファイルを置いて、判定そのものを確かめる。
@@ -9,7 +9,7 @@ struct ModelIntegrityTests {
 
     private func withTempDirectory(_ body: (URL) throws -> Void) throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("koemakase-tests-\(UUID().uuidString)")
+            .appendingPathComponent("sarari-tests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         try body(dir)
@@ -17,7 +17,7 @@ struct ModelIntegrityTests {
 
     /// 「検証済み」の記録が実際の設定を汚さないよう、テスト専用の suite を使う。
     private func scratchDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "koemakase.tests.\(UUID().uuidString)")!
+        UserDefaults(suiteName: "sarari.tests.\(UUID().uuidString)")!
     }
 
     /// 中身から期待値を作る（テスト側でハッシュを手書きしない）。
@@ -29,7 +29,7 @@ struct ModelIntegrityTests {
     @Test("一致すれば通る")
     func matchingPasses() throws {
         try withTempDirectory { dir in
-            let data = Data("koemakase".utf8)
+            let data = Data("sarari".utf8)
             try data.write(to: dir.appendingPathComponent("a.bin"))
             try ModelIntegrity.verify(directory: dir,
                                       entries: [entry(for: data, at: "a.bin")],
@@ -53,7 +53,7 @@ struct ModelIntegrityTests {
     @Test("サイズが違えば落ちる")
     func sizeMismatchFails() throws {
         try withTempDirectory { dir in
-            let data = Data("koemakase".utf8)
+            let data = Data("sarari".utf8)
             try data.write(to: dir.appendingPathComponent("a.bin"))
             let base = entry(for: data, at: "a.bin")
             let wrong = ModelIntegrity.Entry(path: base.path, sha256: base.sha256, size: base.size + 1)
@@ -67,8 +67,8 @@ struct ModelIntegrityTests {
     @Test("サイズが同じでも中身が違えば落ちる")
     func digestMismatchFails() throws {
         try withTempDirectory { dir in
-            let original = Data("koemakase".utf8)
-            let tampered = Data("koemakasE".utf8)  // 同じ長さ
+            let original = Data("sarari".utf8)
+            let tampered = Data("sararI".utf8)  // 同じ長さ
             try tampered.write(to: dir.appendingPathComponent("a.bin"))
             let expected = entry(for: original, at: "a.bin")
             #expect(expected.size == tampered.count)
@@ -82,7 +82,7 @@ struct ModelIntegrityTests {
     @Test("同じマニフェストなら 2 回目は読み飛ばし、変えれば読み直す")
     func revalidatesWhenManifestChanges() throws {
         try withTempDirectory { dir in
-            let data = Data("koemakase".utf8)
+            let data = Data("sarari".utf8)
             let url = dir.appendingPathComponent("a.bin")
             try data.write(to: url)
             let defaults = scratchDefaults()
@@ -90,7 +90,7 @@ struct ModelIntegrityTests {
             try ModelIntegrity.verify(directory: dir, entries: entries, defaults: defaults)
 
             // 記録があるので、中身を壊しても同じマニフェストなら通ってしまう（＝読み飛ばし）。
-            try Data("KOEMAKASE".utf8).write(to: url)
+            try Data("SARARI".utf8).write(to: url)
             try ModelIntegrity.verify(directory: dir, entries: entries, defaults: defaults)
 
             // マニフェストを変えれば版が変わるので、今度は読み直して落ちる。

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import koemakase
+@testable import sarari
 
 /// 履歴 `meta.json` の互換。**古い記録が読めなくなることが、この機能で一番痛い回帰**
 /// （発話の記録は作り直せない）。

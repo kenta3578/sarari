@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// koemakase: 完全ローカルの音声入力アプリ（メニューバー常駐）。
+/// sarari: 完全ローカルの音声入力アプリ（メニューバー常駐）。
 ///
 /// 流れ:
 ///   右⌥(Right Option) でトグル録音 → Apple 音声認識（設定で WhisperKit にも切替可）で文字起こし
 ///   → 辞書置換 →（任意で LLM 整形）→ 最前面アプリのカーソル位置に挿入。
 @main
-struct KoemakaseApp: App {
+struct SarariApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var state = AppState.shared
 

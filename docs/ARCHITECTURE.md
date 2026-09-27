@@ -1,4 +1,4 @@
-# ARCHITECTURE — koemakase の作り
+# ARCHITECTURE — sarari の作り
 
 **この文書が答えること**: 右⌥を押してから文字が入るまでに何がどの順で起き、どのファイルがどこを担い、どこを触ると壊れるか。
 
@@ -12,7 +12,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 
 ```
 起動
-  koemakaseApp / AppDelegate         MenuBarExtra を出し、AppController.start() を呼ぶ
+  sarariApp / AppDelegate         MenuBarExtra を出し、AppController.start() を呼ぶ
   AppController.bootstrap()       権限確認 → ホットキー登録 → エンジン読み込み → 履歴の掃除開始
                                   ※ ホットキーはモデルを待たずに張る（待つと数分間 右⌥ が無反応）
 
@@ -59,7 +59,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 
 | ファイル | 行 | 役割 |
 |---|---:|---|
-| `koemakaseApp.swift` | 56 | `@main`。`MenuBarExtra` シーンと `AppDelegate`。テスト起動時は何も始めない |
+| `sarariApp.swift` | 56 | `@main`。`MenuBarExtra` シーンと `AppDelegate`。テスト起動時は何も始めない |
 | `AppController.swift` | 420 | **全体のオーケストレーション**。録音の開始/停止、パイプライン起動、状態と HUD と履歴への配線 |
 | `AppState.swift` | 293 | `AppStatus`（7 状態）と、そこから導く色・記号・文言・メニューバー画像 |
 | `PipelineGuard.swift` | 97 | 世代番号と、追い越されたパイプラインの結果を控えるキュー |
@@ -83,8 +83,8 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 | `AppleTranscriber.swift` | 184 | Apple SpeechAnalyzer（macOS 26 以降・既定・DL 無し） |
 | `Transcriber.swift` | 91 | WhisperKit large-v3-turbo（初回に約 630MB を取得） |
 | `ModelIntegrity.swift` | 132 | WhisperKit の重みが開発時に確かめたものと同じかを SHA-256 で照合 |
-| `Replacements.swift` | 140 | 辞書置換のルールと `~/koemakase/replacements.json` の読み書き |
-| `FillerRemover.swift` | 153 | フィラー語の決定的な除去（`~/koemakase/fillers.json`）。語を足さず、数値・URL・英単語には触れない |
+| `Replacements.swift` | 140 | 辞書置換のルールと `~/sarari/replacements.json` の読み書き |
+| `FillerRemover.swift` | 153 | フィラー語の決定的な除去（`~/sarari/fillers.json`）。語を足さず、数値・URL・英単語には触れない |
 | `JSONFileSync.swift` | 140 | `replacements.json` / `fillers.json` の読み書きと、外での編集の監視・読み直し（外の編集を上書きしない） |
 
 ### 出力（挿入）
@@ -114,14 +114,14 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 | ファイル | 行 | 役割 |
 |---|---:|---|
 | `SettingsStore.swift` | 455 | 設定の永続化（UserDefaults）と共有状態 |
-| `HistoryStore.swift` | 440 | `~/koemakase/history/<時刻>/meta.json`（音声は残さない）。保存期間の掃除 |
-| `SoundPlayer.swift` | 200 | 開始音 / 停止音。同梱の koemakase の音・`~/koemakase/sounds/` の自分の音・システム音 |
+| `HistoryStore.swift` | 440 | `~/sarari/history/<時刻>/meta.json`（音声は残さない）。保存期間の掃除 |
+| `SoundPlayer.swift` | 200 | 開始音 / 停止音。同梱の sarari の音・`~/sarari/sounds/` の自分の音・システム音 |
 | `LoginItem.swift` | 92 | ログイン時の自動起動（`SMAppService`。真偽値を自前で持たない） |
 
 ### ディスク上の置き場
 
 ```
-~/koemakase/
+~/sarari/
 ├── history/<yyyyMMdd'T'HHmmss.SSS'Z'>/   meta.json（生テキスト・置換後・所要時間・エンジン）  ※ 0700 で作る
 ├── replacements.json                    辞書置換ルール
 ├── fillers.json                         フィラー語
@@ -140,8 +140,8 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 |---|---|---|---|---|
 | `loadingModel(step:)` | hourglass | 黄 | 起動〜権限確認〜モデル読み込み | 読み込み完了 → `idle` |
 | `idle` | mic | なし（システム追従） | ホットキー待ち | 右⌥ → `recording` |
-| `recording` | mic.fill | 赤 | 録音中 | 右⌥ / HUD の停止 → `processing`、Esc → `idle` |
-| `processing` | waveform | 青 | 文字起こし〜挿入 | 完了 → `done` / `warned` / `failed` |
+| `recording` | mic.fill | すみれ | 録音中 | 右⌥ / HUD の停止 → `processing`、Esc → `idle` |
+| `processing` | waveform | 水色 | 文字起こし〜挿入 | 完了 → `done` / `warned` / `failed` |
 | `done(message:)` | checkmark.circle.fill | 緑 | 挿入まで完了 | **1.5 秒**で `idle` |
 | `warned(message:)` | exclamationmark.circle.fill | 黄 | 挿入は済んだが伝えることがある（録音デバイスが変わった等） | **5 秒**で `idle`（読む時間が要るので長い） |
 | `failed(reason:hint:)` | exclamationmark.triangle.fill | 橙 | 失敗。`hint` が付くと HUD が設定画面へ飛ぶボタンを出す | **自動で戻らない**（原因を残す） |
@@ -174,7 +174,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 
 | # | ファイル | 行 | なぜこの順か |
 |---|---|---:|---|
-| 1 | `koemakaseApp.swift` | 56 | 入口。常駐アプリの起動の形（`MenuBarExtra` ＋ `AppDelegate`）が 1 画面で分かる |
+| 1 | `sarariApp.swift` | 56 | 入口。常駐アプリの起動の形（`MenuBarExtra` ＋ `AppDelegate`）が 1 画面で分かる |
 | 2 | `AppState.swift` | 293 | 7 状態を先に知ると、以降のコードが「どの状態を作っているか」で読める |
 | 3 | `DictationPipeline.swift` | 64 | アプリの芯が 60 行に収まっている。ここだけ AppKit も設定も無い |
 | 4 | `AppController.swift` | 420 | 1〜3 を配線している場所。`startRecording` → `stopRecording` → `runPipeline` を順に追う |
@@ -221,7 +221,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 `Tests/` は **AppKit・実モデル・TCC に依存しない純 Swift のロジックだけ**を見る（130 ケース・実行 0.1 秒未満）。権限ダイアログもモデルのダウンロードも起きない（`AppDelegate` がテスト起動を検知して何も始めないため）。
 
 ```bash
-xcodebuild test -project koemakase.xcodeproj -scheme koemakase \
+xcodebuild test -project sarari.xcodeproj -scheme sarari \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
 ```
 

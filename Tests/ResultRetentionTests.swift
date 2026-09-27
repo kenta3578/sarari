@@ -1,5 +1,5 @@
 import Testing
-@testable import koemakase
+@testable import sarari
 
 /// 挿入できなかった結果の残し先（Issue #67 / #143）。
 ///

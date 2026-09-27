@@ -1,4 +1,4 @@
-name: koemakase
+name: sarari
 options:
   bundleIdPrefix: com.kenta3578
   deploymentTarget:
@@ -9,20 +9,20 @@ packages:
   WhisperKit:
     url: https://github.com/argmaxinc/WhisperKit
     # サプライチェーン: 実際に使う revision は Git 追跡している
-    # koemakase.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved で固定される。
+    # sarari.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved で固定される。
     # 依存を上げるときは -resolvePackageDependencies し直して同ファイルをコミットすること。
     from: "0.9.0"
 
 targets:
-  koemakase:
+  sarari:
     type: application
     platform: macOS
     scheme:
       testTargets:
-        - koemakaseTests
+        - sarariTests
     sources:
       - path: Sources
-      # koemakase の開始音・停止音（Issue #2）。scripts/make-sounds.py が作る。
+      # sarari の開始音・停止音（Issue #2）。scripts/make-sounds.py が作る。
       # フォルダ参照なので Contents/Resources/Sounds/ にそのまま入る。
       - path: Resources/Sounds
         type: folder
@@ -31,7 +31,7 @@ targets:
       - package: WhisperKit
     settings:
       base:
-        PRODUCT_NAME: koemakase
+        PRODUCT_NAME: sarari
         PRODUCT_BUNDLE_IDENTIFIER: com.kenta3578.koebun
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
@@ -53,7 +53,7 @@ targets:
   # 単体テスト（Issue #102）。アプリを TEST_HOST にして同じモジュールとして見る
   # （守備範囲とホスト側の起動抑止は Tests/README.md）。
   # TEST_HOST / BUNDLE_LOADER は xcodegen がアプリ依存から自動で埋める。
-  koemakaseTests:
+  sarariTests:
     type: bundle.unit-test
     platform: macOS
     sources:
@@ -61,9 +61,37 @@ targets:
         excludes:
           - README.md
     dependencies:
-      - target: koemakase
+      - target: sarari
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kenta3578.koebunTests
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: "5.9"
+
+# 説明書の画面画像を描き出す専用のスキーム（Issue #56。scripts/docs-shots.sh が使う）。
+# 設定値は UserDefaults にあり仮のホームでは切り替わらないので、既定値を起動引数で渡す。
+# 引数の層は保存値より優先して読まれ、書き込まれないので、使っている人の設定は変わらない。
+schemes:
+  sarari-docshots:
+    build:
+      targets:
+        sarari: all
+        sarariTests: [test]
+    test:
+      targets:
+        - sarariTests
+      # 数値・真偽・配列は XML の plist で書く（"30" のように書くと文字列になり、型が合わずに読み飛ばされる）。
+      # 追加キーは「無し」を表せないので、型の合わない値を置いて保存値を隠す。
+      commandLineArguments:
+        "-startSound Glass": true
+        "-stopSound Basso": true
+        "-hudSize minimal": true
+        "-hudPosition bottomCenter": true
+        "-edgeGlowEnabled <true/>": true
+        "-resultRetention hud": true
+        "-hotKeyModifierCodes <array><integer>61</integer></array>": true
+        "-hotKeyExtraKeyCode none": true
+        "-historyRetentionDays <integer>30</integer>": true
+        "-fillerRemovalEnabled <true/>": true
+        "-ignoredRuleSuggestions <array/>": true
+        "-speechEngine apple": true

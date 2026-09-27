@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import koemakase
+@testable import sarari
 
 /// 文字起こし → 辞書置換 → フィラー除去（Issue #66 / #102）。
 /// **実モデルを使わない。** フェイクのエンジンと固定した時計で、順序と計時だけを確かめる。

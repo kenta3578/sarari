@@ -36,7 +36,7 @@ struct GeneralSettingsView: View {
     var body: some View {
         Form {
             Section("起動") {
-                Toggle("ログイン時に koemakase を起動", isOn: Binding(
+                Toggle("ログイン時に sarari を起動", isOn: Binding(
                     get: { loginItem.isEnabled },
                     set: { loginItem.setEnabled($0) }
                 ))
@@ -66,7 +66,7 @@ struct GeneralSettingsView: View {
                 }
 
                 if loginItem.isOutsideApplications {
-                    Text("いま動いている koemakase が /Applications の外にあります"
+                    Text("いま動いている sarari が /Applications の外にあります"
                          + "（\(Bundle.main.bundleURL.path)）。"
                          + "ここで登録するとそのパスがログイン項目になるので、"
                          + "scripts/install-local.sh で /Applications に入れてから設定してください。")
@@ -128,9 +128,9 @@ struct GeneralSettingsView: View {
                 }
 
                 Text("選び直すと鳴ります。試聴ボタンでいまの音を聞き直せます。"
-                     + "「koemakase の音」はアプリに入っている音です。"
+                     + "「sarari の音」はアプリに入っている音です。"
                      + "「音を追加…」で選んだ音声ファイル（aiff / wav / mp3 / m4a / caf）は "
-                     + "\(SoundPlayer.customDirectory.path) にコピーされ、「自分の音」に出ます。"
+                     + "\((SoundPlayer.customDirectory.path as NSString).abbreviatingWithTildeInPath) にコピーされ、「自分の音」に出ます。"
                      + "削除はゴミ箱に入れるだけなので戻せます。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -189,10 +189,13 @@ struct GeneralSettingsView: View {
                     AppController.shared.refreshHUDLayout(positionChanged: true)
                 }
 
+                Toggle("録音中は画面の縁を光らせる", isOn: $settings.edgeGlowEnabled)
+
                 Text("「最小」は声の大きさと経過時間だけの細いバーで、マウスを乗せると停止・キャンセルが出ます。"
                      + "録音を始めてもマイクが一度も音を拾わないときは、棒がオレンジのマイク斜線に替わります。"
                      + "「非表示」でも開始音・完了音は鳴ります"
-                     + "（キャンセルは HUD からのみ。挿入できなかった結果は「挿入」の設定に従って表示します）。")
+                     + "（キャンセルは HUD からのみ。挿入できなかった結果は「挿入」の設定に従って表示します）。"
+                     + "画面の縁は、マウスのある画面を録音中はすみれ色、文字起こし中は水色で光らせ、挿入できたら白く光って消えます。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -295,13 +298,13 @@ struct GeneralSettingsView: View {
     }
 
     /// 音のピッカーと試聴ボタンの1行（Issue #48）。
-    /// 選択肢は「なし」→ koemakase の音（同梱）→ 自分の音（~/koemakase/sounds/）→ システム音（Issue #71, #2）。
+    /// 選択肢は「なし」→ sarari の音（同梱）→ 自分の音（~/sarari/sounds/）→ システム音（Issue #71, #2）。
     private func soundRow(_ title: String, selection: Binding<String>) -> some View {
         let custom = customSounds
         return HStack {
             Picker(title, selection: selection) {
                 Text(SoundPlayer.none).tag(SoundPlayer.none)
-                Section("koemakase の音") {
+                Section("sarari の音") {
                     ForEach(SoundPlayer.bundledSounds, id: \.self) { Text($0).tag($0) }
                 }
                 if !custom.isEmpty {
@@ -330,7 +333,7 @@ struct GeneralSettingsView: View {
         SoundPlayer.play(name)
     }
 
-    /// 選んだ音声ファイルを `~/koemakase/sounds/` に取り込む（Issue #124）。
+    /// 選んだ音声ファイルを `~/sarari/sounds/` に取り込む（Issue #124）。
     /// 複数選べるので、失敗したものだけ理由を並べて残し、成功した分はそのまま選べるようにする。
     private func importSounds() {
         let panel = NSOpenPanel()
@@ -374,7 +377,7 @@ struct GeneralSettingsView: View {
 
 }
 
-/// 辞書置換ルールの編集。編集内容は即座に `~/koemakase/replacements.json` に保存される。
+/// 辞書置換ルールの編集。編集内容は即座に `~/sarari/replacements.json` に保存される。
 struct ReplacementsSettingsView: View {
     @ObservedObject private var store = ReplacementStore.shared
     @ObservedObject private var settings = SettingsStore.shared
@@ -593,7 +596,9 @@ private struct EditableFileRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Button(url.path) { NSWorkspace.shared.open(url) }
+            // ホームは ~ で出す（短く読めるうえ、説明書の画像にユーザー名が写らない。Issue #56）。
+            // コピーするのは省略しないパス。
+            Button((url.path as NSString).abbreviatingWithTildeInPath) { NSWorkspace.shared.open(url) }
                 .buttonStyle(.link)
                 .font(.caption2)
                 .lineLimit(1)

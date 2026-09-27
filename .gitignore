@@ -55,3 +55,8 @@ local_docs/
 .claude/worktrees/
 ai_docs/*
 !ai_docs/north-star.md
+
+# 説明書サイト（VitePress）
+node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/

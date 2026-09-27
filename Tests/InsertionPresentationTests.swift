@@ -1,5 +1,5 @@
 import Testing
-@testable import koemakase
+@testable import sarari
 
 /// 挿入結果 → メニューバー状態と HUD の動きの導出（Issue #64。`.claude/rules/insertion-feedback.md`）。
 struct InsertionPresentationTests {

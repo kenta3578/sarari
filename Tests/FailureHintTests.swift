@@ -1,5 +1,5 @@
 import Testing
-@testable import koemakase
+@testable import sarari
 
 /// 失敗表示に添える手がかり（`.claude/rules/insertion-feedback.md`）。
 /// **文言の文字列マッチで分岐しない**ための型なので、種類ごとの契約をここで固定する。

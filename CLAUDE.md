@@ -1,4 +1,4 @@
-# koemakase
+# sarari
 
 自分専用・完全ローカルの音声入力（ディクテーション）アプリ。
 
@@ -51,8 +51,8 @@ Mac（Apple Silicon）で、音声 → 文字起こし → カーソルへ直挿
 
 ## Branch Strategy
 
-- `main`: プロダクション（保護）
-- `develop`: 開発（デフォルト）
+- `main`: 他人に渡す版（保護）。入れるたびにタグ `vX.Y.Z` を打つ。説明書サイトはここから出る
+- `develop`: 開発（デフォルト）。自分の実機に入るのはこちら
 
 ## Development Flow（このリポジトリの完了条件）
 
@@ -61,27 +61,40 @@ Mac（Apple Silicon）で、音声 → 文字起こし → カーソルへ直挿
 1. Issue を立てる（`category:*` / `priority:*` ラベル。本文は 問題 / 解決方針 / 完了条件）
 2. `EnterWorktree`（名前は `issue<N>`）で worktree を切って実装する。`.xcodeproj` は gitignore なので最初に `xcodegen generate`。型チェックは署名なしの Debug ビルド、**PR の前に `xcodebuild test` が通ること**（どちらも下の Commands）
 3. Issue 単位でコミット → PR（`Closes #N`）→ `gh pr merge --merge --delete-branch`
+   - **使う人から見て何かが変わる PR は、同じ PR の中で `docs/MANUAL.md` の該当する節を直し、`docs/changelog.md` の「次の版」に1行足す**（判定はそれだけ。中の作りだけの変更は載せない。見出しが無ければ先頭に作る）。サイト（GitHub Pages）に出るのは main に入ったとき
 4. `ExitWorktree`（remove）→ `git pull --ff-only origin develop`
 5. **`./scripts/install-local.sh`** で実機へ入れて起動する（Release ビルド → `koebun-dev` 署名 → `/Applications` 置換 → 起動）
-6. 実機で確認する。`pgrep -x koemakase` で起動を確かめ、UI 変更はスクリーンショットで見る
+6. 実機で確認する。`pgrep -x sarari` で起動を確かめ、UI 変更はスクリーンショットで見る
 7. ユーザーの実機フィードバックは、その場で次の Issue にする（メモに溜めない）
 
 複数の小さな Issue は1つの worktree・1つの PR にまとめてよいが、**コミットは Issue 単位**に分ける。ドキュメントだけの変更は 5〜6 を省いてよい。
 
+## Release（develop → main）
+
+**出す時機**: 更新履歴の「次の版」に使う人から見た変化が溜まり、かつ develop の版を実機で数日使って困りごとが出ていないとき。日付では決めない。
+
+1. `project.yml` の `MARKETING_VERSION` を上げ、`docs/changelog.md` の「次の版」を `vX.Y.Z（YYYY-MM-DD）` に改名する（develop への PR）
+2. develop → main の PR を作ってマージする（`gh pr create --base main --head develop`）
+3. main の先頭にタグを打つ: `git tag -a vX.Y.Z origin/main -m vX.Y.Z && git push origin vX.Y.Z`
+4. main への push で説明書サイトが更新されたことを確かめる
+
+版の上げ方: 使う人から見て新しいことができる → minor（0.2.0）、直しだけ → patch（0.1.1）。
+
 ## Commands
 
 ```bash
-xcodegen generate                                   # project.yml → koemakase.xcodeproj（worktree では必須）
-git diff --exit-code koemakase.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved \
+xcodegen generate                                   # project.yml → sarari.xcodeproj（worktree では必須）
+git diff --exit-code sarari.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved \
   || echo "依存の revision が動いた。意図した更新か確認する（Issue #106）"
-xcodebuild -project koemakase.xcodeproj -scheme koemakase -configuration Debug \
-  -derivedDataPath /tmp/koemakase-dd CODE_SIGNING_ALLOWED=NO build \
+xcodebuild -project sarari.xcodeproj -scheme sarari -configuration Debug \
+  -derivedDataPath /tmp/sarari-dd CODE_SIGNING_ALLOWED=NO build \
   2>&1 | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)"  # 型チェック（署名なし）。**警告も 0 を保つ**
-xcodebuild test -project koemakase.xcodeproj -scheme koemakase \
+xcodebuild test -project sarari.xcodeproj -scheme sarari \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO \
   2>&1 | grep -E "✘|Test run|TEST (SUCCEEDED|FAILED)"     # 単体テスト（0.1秒未満。守備範囲は Tests/README.md）
 ./scripts/install-local.sh                          # 実機へインストールして起動（マージ後に必ず）
-pgrep -x koemakase                                     # 起動確認
+pnpm install && pnpm docs:dev                       # 説明書サイトを手元で見る（docs/ を VitePress で出す。pnpm docs:build でリンク切れ検査）
+pgrep -x sarari                                     # 起動確認
 ./scripts/kpi.sh [--target N]                       # 北極星の KPI（平日の挿入回数）を履歴から集計。目標値は引数で渡す
 ./scripts/model-manifest.sh                         # WhisperKit の重みのマニフェストを作り直す（Issue #106）
 tccutil reset Accessibility com.kenta3578.koebun    # 権限トグルが効かないときの一度きりのリセット

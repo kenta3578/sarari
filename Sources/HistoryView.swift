@@ -265,7 +265,7 @@ struct HistoryView: View {
 
     private func footer(_ entry: HistoryEntry) -> some View {
         HStack {
-            Text(HistoryFiles.directoryURL(for: entry.id).path)
+            Text((HistoryFiles.directoryURL(for: entry.id).path as NSString).abbreviatingWithTildeInPath)
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .textSelection(.enabled)
@@ -418,7 +418,7 @@ final class HistoryWindowController: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.contentView = NSHostingView(rootView: HistoryView())
-        window.setFrameAutosaveName("koemakase.history")
+        window.setFrameAutosaveName("sarari.history")
         window.center()
         self.window = window
         return window

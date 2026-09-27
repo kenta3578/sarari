@@ -6,9 +6,9 @@
     python3 scripts/make-sounds.py            # 同梱する音（BUNDLED）を作り直す
     python3 scripts/make-sounds.py --list     # 候補名を表示
     python3 scripts/make-sounds.py --gain 0.5 # 音量（既定 0.35。1.0 でフルスケール）
-    python3 scripts/make-sounds.py --out ~/koemakase/sounds tick   # 同梱しない候補を自分の音として試す
+    python3 scripts/make-sounds.py --out ~/sarari/sounds tick   # 同梱しない候補を自分の音として試す
 
-同梱した音は設定 →「録音開始音」「録音停止音」の「koemakase の音」に出る。
+同梱した音は設定 →「録音開始音」「録音停止音」の「sarari の音」に出る。
 BUNDLED を変えたら Sources/SoundPlayer.swift の bundledSounds も揃える（テストが突き合わせる）。
 気に入らなければ下の PRESETS の周波数・長さを変えて作り直す。
 

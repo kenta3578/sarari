@@ -100,7 +100,7 @@ enum FillerRemover {
     }
 }
 
-/// フィラー語彙の永続化（`~/koemakase/fillers.json`）。自分の口癖に合わせて育てる。
+/// フィラー語彙の永続化（`~/sarari/fillers.json`）。自分の口癖に合わせて育てる。
 @MainActor
 final class FillerStore: ObservableObject {
     static let shared = FillerStore()

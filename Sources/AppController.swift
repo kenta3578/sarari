@@ -11,6 +11,8 @@ final class AppController {
     private let recorder = AudioRecorder()
     private let hotkeys = HotKeyManager()
     private let hud = RecordingHUDController()
+    /// 録音中に画面の縁を光らせる（Issue #48）。状態は自分で AppState から拾う。
+    private let edgeGlow = EdgeGlowController()
     private let state = AppState.shared
 
     /// 録音を始めた時点の最前面アプリ。挿入直前の照合に使う（Issue #80）。
@@ -95,9 +97,12 @@ final class AppController {
         // いなかったので、常駐したままだと「7日」と表示しながら消えなかった（Issue #81）。
         HistoryStore.shared.start()
 
-        // 録音レベルは HUD の波形にだけ流す（AppState を毎フレーム更新しない）。
-        recorder.onLevel = { [hud] level in
-            Task { @MainActor in hud.push(level: level) }
+        // 録音レベルは HUD の波形と縁の光にだけ流す（AppState を毎フレーム更新しない）。
+        recorder.onLevel = { [hud, edgeGlow] level in
+            Task { @MainActor in
+                hud.push(level: level)
+                edgeGlow.push(level: level)
+            }
         }
         // 録音中に AirPods が繋がる／USB マイクを抜くと AVAudioEngine が止まり、
         // 以降の音が入らない。黙って欠けたまま挿入しないよう、その場で締める（Issue #77）。

@@ -19,7 +19,7 @@ struct ReplacementRule: Codable, Identifiable, Equatable {
     }
 }
 
-/// 辞書置換ルールの永続化（`~/koemakase/replacements.json`）と適用。
+/// 辞書置換ルールの永続化（`~/sarari/replacements.json`）と適用。
 ///
 /// 文字起こし直後・（将来入る）整形 LLM の **前段** で機械的に置換する。
 /// LLM を通さないので同じ入力からは必ず同じ出力になる。
@@ -54,7 +54,7 @@ final class ReplacementStore: ObservableObject {
     /// ファイルを読めなかった・外の編集とぶつかったときの説明。設定画面に出す（Issue #7）。
     @Published private(set) var fileProblem: String?
 
-    /// `~/koemakase/replacements.json`。sandbox OFF 前提で実ホーム直下に置く。
+    /// `~/sarari/replacements.json`。sandbox OFF 前提で実ホーム直下に置く。
     static var fileURL: URL {
         DataDirectory.url
             .appendingPathComponent("replacements.json")

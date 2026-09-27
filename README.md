@@ -1,14 +1,14 @@
-# koemakase（声まかせ）
+# sarari（さらり）
 
 完全ローカルで動く、Mac 用の日本語音声入力アプリ。
 
 ホットキーを押して話し、もう一度押すと、最前面のアプリのカーソル位置に文字が入ります。認識は macOS 内蔵の音声認識を使うので、モデルのダウンロードは要りません。音声もテキストも端末の外に出ません。
 
-<img src="docs/menubar.png" alt="koemakase のメニューバーのメニュー" width="267">
+<img src="docs/menubar.png" alt="sarari のメニューバーのメニュー" width="267">
 
 <!-- TODO: デモ GIF を docs/demo.gif に置いてここに貼る（録音 → 挿入まで）-->
 
-旧名は koebun です（同名の別製品があったため 2026 年 9 月に改名。`~/koebun` のデータは初回起動時に `~/koemakase` へ移ります）。
+旧名は koemakase（声まかせ）、その前は koebun です（2026 年 9 月に改名）。`~/koemakase` や `~/koebun` のデータは、初回起動時に `~/sarari` へ移ります。
 
 ## 機能
 
@@ -34,21 +34,21 @@ LLM による整形、話しながら文字が出る表示、多言語対応は�
 
 ```bash
 brew install xcodegen
-git clone https://github.com/kenta3578/koemakase.git
-cd koemakase
+git clone https://github.com/kenta3578/sarari.git
+cd sarari
 xcodegen generate
-open koemakase.xcodeproj   # Signing & Capabilities で自分の Personal Team を選んで ⌘R
+open sarari.xcodeproj   # Signing & Capabilities で自分の Personal Team を選んで ⌘R
 ```
 
-初回はマイクとアクセシビリティの許可が要ります。ホットキーを押しても反応しないときは、システム設定 › プライバシーとセキュリティ › アクセシビリティ で koemakase が ON になっているか見てください。
+初回はマイクとアクセシビリティの許可が要ります。ホットキーを押しても反応しないときは、システム設定 › プライバシーとセキュリティ › アクセシビリティ で sarari が ON になっているか見てください。
 
 ## 使い方
 
 1. 入力したい場所にカーソルを置く
-2. 右 ⌥ を押して話す（開始音が鳴る）
-3. もう一度右 ⌥ を押す（停止音が鳴り、カーソル位置に文字が入る）
+2. 録音キー（最初は右 ⌥。設定で変えられる）を押して話す（開始音が鳴る）
+3. もう一度録音キーを押す（停止音が鳴り、カーソル位置に文字が入る）
 
-設定の全体と「やりたいこと → どこを触る」は [説明書](docs/MANUAL.md) にあります。
+設定の全体と「やりたいこと → どこを触る」は [説明書](https://kenta3578.github.io/sarari/manual)（[Markdown](docs/MANUAL.md)）に、何が変わったかは [更新履歴](https://kenta3578.github.io/sarari/changelog) にあります。
 
 ## プライバシー
 

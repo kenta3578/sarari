@@ -1,5 +1,5 @@
 import Testing
-@testable import koemakase
+@testable import sarari
 
 /// 辞書ルールの影響の見積もり（Issue #36）。誤爆を登録前に見せるのが目的なので、それが例に出ることを見る。
 struct RuleImpactTests {

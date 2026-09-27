@@ -1,8 +1,8 @@
 import Foundation
 import Testing
-@testable import koemakase
+@testable import sarari
 
-/// 同梱の koemakase の音（Issue #2）。テストはアプリをホストに走るので `Bundle.main` がアプリ本体。
+/// 同梱の sarari の音（Issue #2）。テストはアプリをホストに走るので `Bundle.main` がアプリ本体。
 @MainActor
 struct SoundPlayerTests {
 
@@ -23,7 +23,7 @@ struct SoundPlayerTests {
         #expect(Set(shipped) == Set(SoundPlayer.bundledSounds))
     }
 
-    @Test("選択肢は なし → koemakase の音 → 自分の音 → システム音 の順で、名前が重ならない")
+    @Test("選択肢は なし → sarari の音 → 自分の音 → システム音 の順で、名前が重ならない")
     func choicesAreGroupedWithoutDuplicates() {
         let choices = SoundPlayer.choices()
         #expect(choices.first == SoundPlayer.none)
@@ -32,7 +32,7 @@ struct SoundPlayerTests {
         #expect(Set(choices).count == choices.count)
     }
 
-    @Test("koemakase の音はシステム音と名前が被らない")
+    @Test("sarari の音はシステム音と名前が被らない")
     func bundledNamesDoNotShadowSystemSounds() {
         #expect(Set(SoundPlayer.bundledSounds).isDisjoint(with: SoundPlayer.systemSounds))
     }

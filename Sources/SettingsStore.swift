@@ -21,6 +21,10 @@ final class SettingsStore: ObservableObject {
     @Published var hudPosition: HUDPosition {
         didSet { UserDefaults.standard.set(hudPosition.rawValue, forKey: "hudPosition") }
     }
+    /// 録音中に画面の縁を光らせるか（Issue #48）。HUD を見ていなくても録音中だと分かる。
+    @Published var edgeGlowEnabled: Bool {
+        didSet { UserDefaults.standard.set(edgeGlowEnabled, forKey: "edgeGlowEnabled") }
+    }
     /// 挿入できなかった結果をどこに残すか（Issue #67）。
     ///
     /// 以前は `showResultPanel` と `keepResultOnClipboardWhenUnsure` の 2 つの Bool に
@@ -61,7 +65,7 @@ final class SettingsStore: ObservableObject {
         didSet { UserDefaults.standard.set(historyRetentionDays, forKey: "historyRetentionDays") }
     }
     /// フィラー（えっと・あの・まあ…）を決定的に取り除く（Issue #59）。LLM を使わず遅延ゼロ。
-    /// 語彙は `~/koemakase/fillers.json`。履歴には生テキストが残るので OFF に戻せば元どおり。
+    /// 語彙は `~/sarari/fillers.json`。履歴には生テキストが残るので OFF に戻せば元どおり。
     @Published var fillerRemovalEnabled: Bool {
         didSet { UserDefaults.standard.set(fillerRemovalEnabled, forKey: "fillerRemovalEnabled") }
     }
@@ -128,7 +132,7 @@ final class SettingsStore: ObservableObject {
     }
 
     private init() {
-        // 自分の音（~/koemakase/sounds/）を指していてファイルが消えていたら「なし」に戻す（Issue #71）。
+        // 自分の音（~/sarari/sounds/）を指していてファイルが消えていたら「なし」に戻す（Issue #71）。
         let storedStart = UserDefaults.standard.string(forKey: "startSound") ?? "Glass"
         let storedStop  = UserDefaults.standard.string(forKey: "stopSound")  ?? "Basso"
         startSound = SoundPlayer.isAvailable(storedStart) ? storedStart : SoundPlayer.none
@@ -136,6 +140,7 @@ final class SettingsStore: ObservableObject {
         hudSize = Self.storedHUDSize()
         hudPosition = UserDefaults.standard.string(forKey: "hudPosition")
             .flatMap(HUDPosition.init(rawValue:)) ?? .bottomCenter
+        edgeGlowEnabled = UserDefaults.standard.object(forKey: "edgeGlowEnabled") as? Bool ?? true
         resultRetention = Self.storedResultRetention()
         let storedExtra = (UserDefaults.standard.object(forKey: "hotKeyExtraKeyCode") as? Int).flatMap(UInt16.init(exactly:))
         let storedModifiers = Self.storedHotKeyModifiers()

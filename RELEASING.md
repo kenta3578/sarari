@@ -1,6 +1,6 @@
 # リリース手順
 
-`koemakase.app` を「ダウンロードして開くだけで動く」形で配布するための手順。
+`sarari.app` を「ダウンロードして開くだけで動く」形で配布するための手順。
 
 > **重要: この手順はまだ一度も実行していません。**
 > 署名と notarization には有料の Apple Developer Program（年 $99）と Developer ID Application 証明書が必要で、
@@ -15,7 +15,7 @@ macOS の Gatekeeper は、未署名／未 notarize のアプリを「開発元�
 ユーザーに「右クリック > 開く」や `xattr -d com.apple.quarantine` を強要するのは導入摩擦としては致命的なので、
 配布物は必ず署名 + notarization を通す。
 
-koemakase はサンドボックス OFF（グローバルキー監視と ⌘V 合成のため）なので、
+sarari はサンドボックス OFF（グローバルキー監視と ⌘V 合成のため）なので、
 **Hardened Runtime だけは必ず有効にする**。無効のままだと notarization が弾かれる。
 
 ---
@@ -34,12 +34,12 @@ koemakase はサンドボックス OFF（グローバルキー監視と ⌘V 合
    - App-Specific Password を https://account.apple.com で作成する
      （Apple ID のログインパスワードそのものは使えない）
    ```bash
-   xcrun notarytool store-credentials "koemakase-notary" \
+   xcrun notarytool store-credentials "sarari-notary" \
      --apple-id "<your-apple-id@example.com>" \
      --team-id "<TEAMID>" \
      --password "<app-specific-password>"
    ```
-   以降は `--keychain-profile "koemakase-notary"` で参照できる。
+   以降は `--keychain-profile "sarari-notary"` で参照できる。
 
 ---
 
@@ -58,7 +58,7 @@ koemakase はサンドボックス OFF（グローバルキー監視と ⌘V 合
 ```
 
 Hardened Runtime を有効にすると、マイクとイベント送出に entitlement が要る。
-`Sources/koemakase.entitlements` を作って target の `ENTITLEMENTS` に指定する:
+`Sources/sarari.entitlements` を作って target の `ENTITLEMENTS` に指定する:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -82,15 +82,15 @@ Hardened Runtime を有効にすると、マイクとイベント送出に entit
 ```bash
 xcodegen generate
 
-xcodebuild -project koemakase.xcodeproj \
-  -scheme koemakase \
+xcodebuild -project sarari.xcodeproj \
+  -scheme sarari \
   -configuration Release \
   -destination 'platform=macOS' \
-  -archivePath build/koemakase.xcarchive \
+  -archivePath build/sarari.xcarchive \
   archive
 
 xcodebuild -exportArchive \
-  -archivePath build/koemakase.xcarchive \
+  -archivePath build/sarari.xcarchive \
   -exportOptionsPlist ExportOptions.plist \
   -exportPath build/export
 ```
@@ -115,8 +115,8 @@ xcodebuild -exportArchive \
 署名を確認:
 
 ```bash
-codesign --verify --deep --strict --verbose=2 build/export/koemakase.app
-codesign -dvvv --entitlements - build/export/koemakase.app 2>&1 | grep -i runtime
+codesign --verify --deep --strict --verbose=2 build/export/sarari.app
+codesign -dvvv --entitlements - build/export/sarari.app 2>&1 | grep -i runtime
 # flags に "runtime" が含まれていること（= Hardened Runtime 有効）
 ```
 
@@ -126,20 +126,20 @@ codesign -dvvv --entitlements - build/export/koemakase.app 2>&1 | grep -i runtim
 
 ```bash
 mkdir -p build/dmg
-cp -R build/export/koemakase.app build/dmg/
+cp -R build/export/sarari.app build/dmg/
 ln -s /Applications build/dmg/Applications   # ドラッグ&ドロップ用
 
-hdiutil create -volname "koemakase" \
+hdiutil create -volname "sarari" \
   -srcfolder build/dmg \
   -ov -format UDZO \
-  build/koemakase-<VERSION>.dmg
+  build/sarari-<VERSION>.dmg
 ```
 
 **.dmg 自体にも署名する**（署名しないと notarization を通してもマウント時に警告が出る）:
 
 ```bash
 codesign --force --sign "Developer ID Application: <Your Name> (TEAMID)" \
-  --timestamp build/koemakase-<VERSION>.dmg
+  --timestamp build/sarari-<VERSION>.dmg
 ```
 
 ---
@@ -148,25 +148,25 @@ codesign --force --sign "Developer ID Application: <Your Name> (TEAMID)" \
 
 ```bash
 # 提出（完了までブロックする）
-xcrun notarytool submit build/koemakase-<VERSION>.dmg \
-  --keychain-profile "koemakase-notary" \
+xcrun notarytool submit build/sarari-<VERSION>.dmg \
+  --keychain-profile "sarari-notary" \
   --wait
 
 # 失敗したらログを見る
-xcrun notarytool log <SUBMISSION_ID> --keychain-profile "koemakase-notary"
+xcrun notarytool log <SUBMISSION_ID> --keychain-profile "sarari-notary"
 ```
 
 成功したら **staple**（.dmg にチケットを埋め込み、オフラインでも検証が通るようにする）:
 
 ```bash
-xcrun stapler staple build/koemakase-<VERSION>.dmg
-xcrun stapler validate build/koemakase-<VERSION>.dmg
+xcrun stapler staple build/sarari-<VERSION>.dmg
+xcrun stapler validate build/sarari-<VERSION>.dmg
 ```
 
 最終確認 — ここが Gatekeeper の実挙動そのもの:
 
 ```bash
-spctl -a -vvv -t install build/koemakase-<VERSION>.dmg
+spctl -a -vvv -t install build/sarari-<VERSION>.dmg
 # → "accepted / source=Notarized Developer ID" と出れば配布可能
 ```
 
@@ -188,8 +188,8 @@ git tag v<VERSION>
 git push origin v<VERSION>
 
 gh release create v<VERSION> \
-  build/koemakase-<VERSION>.dmg \
-  --title "koemakase v<VERSION>" \
+  build/sarari-<VERSION>.dmg \
+  --title "sarari v<VERSION>" \
   --notes-file <リリースノート>
 ```
 
@@ -205,32 +205,32 @@ gh release create v<VERSION> \
 
 ## 6. Homebrew cask（任意・Releases が安定してから）
 
-`homebrew-koemakase` のような tap リポジトリを作り、`Casks/koemakase.rb` を置く:
+`homebrew-sarari` のような tap リポジトリを作り、`Casks/sarari.rb` を置く:
 
 ```ruby
-cask "koemakase" do
+cask "sarari" do
   version "<VERSION>"
-  sha256 "<shasum -a 256 build/koemakase-<VERSION>.dmg の結果>"
+  sha256 "<shasum -a 256 build/sarari-<VERSION>.dmg の結果>"
 
-  url "https://github.com/kenta3578/koemakase/releases/download/v#{version}/koemakase-#{version}.dmg"
-  name "koemakase"
+  url "https://github.com/kenta3578/sarari/releases/download/v#{version}/sarari-#{version}.dmg"
+  name "sarari"
   desc "Fully local Japanese dictation app for macOS"
-  homepage "https://github.com/kenta3578/koemakase"
+  homepage "https://github.com/kenta3578/sarari"
 
   depends_on macos: ">= :sonoma"
   depends_on arch: :arm64
 
-  app "koemakase.app"
+  app "sarari.app"
 
   zap trash: [
     "~/Library/Preferences/com.kenta3578.koebun.plist",
     "~/Library/Application Support/com.kenta3578.koebun",
-    "~/koemakase",
+    "~/sarari",
   ]
 end
 ```
 
-インストールは `brew install --cask kenta3578/koemakase/koemakase`。
+インストールは `brew install --cask kenta3578/sarari/sarari`。
 
 > 本家 homebrew-cask への登録には「安定してメンテされている」等の要件があるので、
 > まずは自前 tap から始める。

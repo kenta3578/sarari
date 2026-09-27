@@ -36,7 +36,7 @@ enum AppleTranscriberError: LocalizedError {
 /// 他者の英語ベンチに基づくもので日本語・実利用では検証していない。それを測るための実装。
 @available(macOS 26.0, *)
 actor AppleTranscriber: SpeechEngine {
-    /// 日本語固定。koemakase は多言語を明示的に捨てている（`docs/design-rationale.md` §3）。
+    /// 日本語固定。sarari は多言語を明示的に捨てている（`docs/design-rationale.md` §3）。
     private static let requestedLocale = Locale(identifier: "ja-JP")
 
     /// `AudioRecorder` が出力するサンプルレート。比較のため入力側は WhisperKit と揃える。
