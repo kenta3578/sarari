@@ -11,13 +11,18 @@ export default defineConfig({
   base: '/sarari/',
   cleanUrls: true,
   lastUpdated: true,
-  // docs/README.md は GitHub でフォルダを開いた人向けの目次なのでサイトには出さない
-  srcExclude: ['README.md'],
+  // サイトは使う人向けの説明書だけにする。docs/README.md（フォルダの目次）と、
+  // コードを読む人向けの文書は GitHub 上で読んでもらう
+  srcExclude: [
+    'README.md',
+    'ARCHITECTURE.md',
+    'SWIFT-NOTES.md',
+    'design-rationale.md',
+    'engine-benchmark.md',
+  ],
   rewrites: {
     'MANUAL.md': 'manual.md',
     'PRIVACY.md': 'privacy.md',
-    'ARCHITECTURE.md': 'architecture.md',
-    'SWIFT-NOTES.md': 'swift-notes.md',
   },
   markdown: {
     // docs/ の外（../Tests/README.md や ../presets/engineer.json）への相対リンクはサイトに無いので、
@@ -37,26 +42,11 @@ export default defineConfig({
     nav: [
       { text: '説明書', link: '/manual' },
       { text: '更新履歴', link: '/changelog' },
-      { text: '中の作り', link: '/architecture' },
     ],
     sidebar: [
-      {
-        text: '使う',
-        items: [
-          { text: '説明書', link: '/manual' },
-          { text: '更新履歴', link: '/changelog' },
-          { text: 'プライバシー', link: '/privacy' },
-        ],
-      },
-      {
-        text: '中を読む',
-        items: [
-          { text: '中の作り', link: '/architecture' },
-          { text: '設計の根拠', link: '/design-rationale' },
-          { text: '認識エンジンの計測', link: '/engine-benchmark' },
-          { text: 'Web の言葉で読む Swift', link: '/swift-notes' },
-        ],
-      },
+      { text: '説明書', link: '/manual' },
+      { text: '更新履歴', link: '/changelog' },
+      { text: 'プライバシー', link: '/privacy' },
     ],
     outline: { level: [2, 3], label: 'このページの内容' },
     socialLinks: [{ icon: 'github', link: repo }],
