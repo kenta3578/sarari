@@ -54,6 +54,29 @@ export default defineConfig({
     search: {
       provider: 'local',
       options: {
+        // MiniSearch は空白と記号で語を切るので、空白のない日本語は文ごと1語になり、
+        // 文の途中の語で引けない。日本語の連なりは2文字ずつ重ねて切る（bi-gram）。
+        // 関数は文字列にしてブラウザへ渡されるので、外の変数を参照しないこと。
+        miniSearch: {
+          options: {
+            tokenize: (text: string) => {
+              const tokens: string[] = []
+              const cjk = /[\p{scx=Han}\p{scx=Hira}\p{scx=Kana}]+/u
+              for (const word of text.match(/[\p{L}\p{N}_]+/gu) ?? []) {
+                for (const run of word.split(/([\p{scx=Han}\p{scx=Hira}\p{scx=Kana}]+)/u)) {
+                  if (!run) continue
+                  if (!cjk.test(run) || run.length === 1) {
+                    tokens.push(run)
+                    continue
+                  }
+                  for (let i = 0; i < run.length - 1; i++) tokens.push(run.slice(i, i + 2))
+                }
+              }
+              return tokens
+            },
+          },
+          searchOptions: { combineWith: 'AND', fuzzy: false },
+        },
         translations: {
           button: { buttonText: '検索', buttonAriaLabel: '検索' },
           modal: {
