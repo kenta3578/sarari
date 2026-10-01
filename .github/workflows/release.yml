@@ -39,18 +39,27 @@ jobs:
         run: ./scripts/build-release.sh "$GITHUB_REF_NAME"
 
       - name: リリースノートを作る
-        # 更新履歴の「## vX.Y.Z（日付）」の節をそのまま使い、インストール手順へのリンクを添える
+        # 更新履歴の「## vX.Y.Z（日付）」の節をそのまま使い、入れ方と必要な許可を添える（RELEASING.md「リリースノートに必ず書くこと」）
         run: |
+          section=$(awk -v tag="$GITHUB_REF_NAME" '
+            index($0, "## " tag "（") == 1 { on = 1; next }
+            on && /^## / { exit }
+            on { print }
+          ' docs/changelog.md)
+          if [ -z "$(echo "$section" | tr -d '[:space:]')" ]; then
+            echo "::error::docs/changelog.md に「## ${GITHUB_REF_NAME}（日付）」の節が無い。「次の版」を改名してからタグを打つ"
+            exit 1
+          fi
           {
-            awk -v tag="$GITHUB_REF_NAME" '
-              index($0, "## " tag "（") == 1 { on = 1; next }
-              on && /^## / { exit }
-              on { print }
-            ' docs/changelog.md
+            echo "$section"
             echo
             echo "---"
             echo
-            echo "**入れ方**: \`sarari-$GITHUB_REF_NAME.zip\` を展開して「アプリケーション」に移し、[README のインストール](https://github.com/$GITHUB_REPOSITORY#インストール)の手順で開きます。Apple Silicon・macOS 14 以降。開発元の署名がないので、初回だけ Mac に止められます。"
+            echo "**入れ方**: \`sarari-$GITHUB_REF_NAME.zip\` を展開して「アプリケーション」に移し、[README のインストール](https://github.com/$GITHUB_REPOSITORY#インストール)の手順で開きます。開発元の署名がないので、初回だけ Mac に止められます。"
+            echo
+            echo "- Apple Silicon の Mac 専用です"
+            echo "- macOS 26 以降は内蔵の音声認識を使い、ダウンロードは要りません。macOS 14〜15 では WhisperKit になり、初回に約 630MB のモデルを Hugging Face から取得します（これが唯一の通信です）"
+            echo "- アクセシビリティの許可が要ります。許可しないと録音キーを押しても反応しません。版を入れ替えたあとは許可を付け直してください"
           } > build/release/notes.md
           cat build/release/notes.md
 
