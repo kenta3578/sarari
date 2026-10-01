@@ -1,6 +1,6 @@
 # ビルド & 実行ガイド
 
-署名済みバイナリはまだ配布していないので（[RELEASING.md](RELEASING.md) 参照）、現状はソースからビルドして使う。
+使うだけなら、[Releases](https://github.com/kenta3578/sarari/releases/latest) の zip を入れれば足りる（[README のインストール](README.md#インストール)）。ここはソースから自分でビルドするときの手順。
 
 ## 前提（初回のみ）
 

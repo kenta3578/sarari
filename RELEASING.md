@@ -2,10 +2,26 @@
 
 `sarari.app` を「ダウンロードして開くだけで動く」形で配布するための手順。
 
-> **重要: この手順はまだ一度も実行していません。**
+## いま動いているもの: アドホック署名の zip
+
+タグ `vX.Y.Z` を push すると、`.github/workflows/release.yml` が `scripts/build-release.sh` で
+アドホック署名の `sarari.app` を作り、`sarari-vX.Y.Z.zip` を GitHub Releases に添付する（Issue #73）。
+リリースノートは `docs/changelog.md` の `## vX.Y.Z（日付）` の節から作る。
+タグと `project.yml` の `MARKETING_VERSION` が違うとジョブは止まる。
+
+手元で同じ物を作るときは `./scripts/build-release.sh vX.Y.Z`（`build/release/` に出る）。
+
+この配り方の制約:
+
+- Gatekeeper に一度止められる。使う人は システム設定 › プライバシーとセキュリティ の「このまま開く」を押す（macOS 15 以降は「右クリック → 開く」では通らない）
+- 署名が版ごとに変わるので、入れ替えるたびにアクセシビリティの許可を付け直してもらう必要がある
+
+以下の Developer ID 署名と公証は、使ってもらえる見込みが立ってから判断する（年 $99）。
+
+> **重要: 以下の手順はまだ一度も実行していません。**
 > 署名と notarization には有料の Apple Developer Program（年 $99）と Developer ID Application 証明書が必要で、
 > 現時点では取得していません。ここに書いてあるのは**証明書を用意したあとに実行する手順の文書化**であり、
-> 実行して検証した結果ではありません。GitHub Releases にはまだ何も置いていません。
+> 実行して検証した結果ではありません。
 
 ---
 

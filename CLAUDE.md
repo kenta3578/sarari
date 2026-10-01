@@ -76,7 +76,8 @@ Mac（Apple Silicon）で、音声 → 文字起こし → カーソルへ直挿
 1. `project.yml` の `MARKETING_VERSION` を上げ、`docs/changelog.md` の「次の版」を `vX.Y.Z（YYYY-MM-DD）` に改名する（develop への PR）
 2. develop → main の PR を作ってマージする（`gh pr create --base main --head develop`）
 3. main の先頭にタグを打つ: `git tag -a vX.Y.Z origin/main -m vX.Y.Z && git push origin vX.Y.Z`
-4. main への push で説明書サイトが更新されたことを確かめる
+4. タグの push で `release` ワークフローが走り、Releases に `sarari-vX.Y.Z.zip` が付いたことを確かめる（`gh release view vX.Y.Z`）。タグと `MARKETING_VERSION` が違うと止まる
+5. main への push で説明書サイトが更新されたことを確かめる
 
 版の上げ方: 使う人から見て新しいことができる → minor（0.2.0）、直しだけ → patch（0.1.1）。
 
@@ -93,6 +94,7 @@ xcodebuild test -project sarari.xcodeproj -scheme sarari \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO \
   2>&1 | grep -E "✘|Test run|TEST (SUCCEEDED|FAILED)"     # 単体テスト（0.1秒未満。守備範囲は Tests/README.md）
 ./scripts/install-local.sh                          # 実機へインストールして起動（マージ後に必ず）
+./scripts/build-release.sh vX.Y.Z                   # 配布用のアドホック署名 zip を build/release/ に作る（CI と同じ物）
 pnpm install && pnpm docs:dev                       # 説明書サイトを手元で見る（docs/ を VitePress で出す。pnpm docs:build でリンク切れ検査）
 pgrep -x sarari                                     # 起動確認
 ./scripts/kpi.sh [--target N]                       # 北極星の KPI（平日の挿入回数）を履歴から集計。目標値は引数で渡す
