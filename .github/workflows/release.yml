@@ -7,8 +7,7 @@ on:
   push:
     tags: ['v*.*.*']
 
-permissions:
-  contents: write # Releases の作成と添付
+permissions: {} # 権限はジョブ側で必要な分だけ付ける
 
 concurrency:
   group: release-${{ github.ref }}
@@ -18,8 +17,10 @@ jobs:
   release:
     # 既定の Apple 音声認識（SpeechAnalyzer）は macOS 26 SDK が要る
     runs-on: macos-26
+    permissions:
+      contents: write # Releases の作成と添付
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: タグと MARKETING_VERSION が一致するか
         # 一致しないと「v0.2.0 の zip を開くと 0.1.0 と名乗る」版ができる
@@ -31,9 +32,11 @@ jobs:
           fi
 
       - name: 道具をそろえる
+        # ランナーの既定の Xcode は予告のうえで切り替わるので、版を明示して固定する
         run: |
-          brew install xcodegen
+          sudo xcode-select -s /Applications/Xcode_26.6.app
           xcodebuild -version
+          brew install xcodegen
 
       - name: ビルドして zip にする
         run: ./scripts/build-release.sh "$GITHUB_REF_NAME"
@@ -64,14 +67,22 @@ jobs:
           cat build/release/notes.md
 
       - name: Releases に添付する
+        # 下書きで作って zip を付けてから公開する（Immutable releases を有効にしても通る順番）
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          zip="build/release/sarari-$GITHUB_REF_NAME.zip"
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            # 失敗したジョブの再実行では、既にあるリリースの zip だけ差し替える
-            gh release upload "$GITHUB_REF_NAME" "$zip" --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" "$zip" \
-              --title "sarari $GITHUB_REF_NAME" --notes-file build/release/notes.md --verify-tag
-          fi
+          tag="$GITHUB_REF_NAME"
+          zip="build/release/sarari-$tag.zip"
+          draft=$(gh release view "$tag" --json isDraft -q .isDraft 2>/dev/null || echo none)
+          case "$draft" in
+            none)
+              gh release create "$tag" "$zip" --draft \
+                --title "sarari $tag" --notes-file build/release/notes.md --verify-tag ;;
+            true)
+              # 前回のジョブが公開前に落ちた。下書きの zip を差し替えて続ける
+              gh release upload "$tag" "$zip" --clobber ;;
+            *)
+              echo "::error::$tag は公開済み。版を上げて新しいタグを打つ"
+              exit 1 ;;
+          esac
+          gh release edit "$tag" --draft=false

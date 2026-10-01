@@ -29,8 +29,9 @@ APP="$DERIVED/Build/Products/Release/sarari.app"
 [ -d "$APP" ] || { echo "ビルド成果物が見つからない: $APP" >&2; exit 1; }
 
 echo "==> アドホック署名"
-# Apple Silicon は未署名のバイナリを起動しない。--deep で同梱のフレームワークもまとめて署名する。
-codesign --force --deep --sign - "$APP"
+# Apple Silicon は未署名のバイナリを起動しない。--deep は署名に使わない（Apple 非推奨）。
+# 埋め込みのフレームワークを持つようになったら、内側から先に個別に署名する。
+codesign --force --sign - "$APP"
 codesign --verify --deep --strict "$APP"
 
 echo "==> zip を作る"
