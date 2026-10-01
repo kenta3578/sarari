@@ -1,0 +1,68 @@
+# タグ vX.Y.Z を push したら sarari.app をビルドして zip にし、GitHub Releases に添付する（Issue #73）。
+# Xcode を持っていない人が、ダウンロードして開くだけで入れられるようにするため。
+# 署名はアドホック（Developer ID と公証は未対応。理由は RELEASING.md）。
+name: release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write # Releases の作成と添付
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # 既定の Apple 音声認識（SpeechAnalyzer）は macOS 26 SDK が要る
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: タグと MARKETING_VERSION が一致するか
+        # 一致しないと「v0.2.0 の zip を開くと 0.1.0 と名乗る」版ができる
+        run: |
+          declared="v$(sed -n 's/^ *MARKETING_VERSION: *"\(.*\)"/\1/p' project.yml)"
+          if [ "$declared" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::タグ $GITHUB_REF_NAME と project.yml の MARKETING_VERSION ($declared) が違う"
+            exit 1
+          fi
+
+      - name: 道具をそろえる
+        run: |
+          brew install xcodegen
+          xcodebuild -version
+
+      - name: ビルドして zip にする
+        run: ./scripts/build-release.sh "$GITHUB_REF_NAME"
+
+      - name: リリースノートを作る
+        # 更新履歴の「## vX.Y.Z（日付）」の節をそのまま使い、インストール手順へのリンクを添える
+        run: |
+          {
+            awk -v tag="$GITHUB_REF_NAME" '
+              index($0, "## " tag "（") == 1 { on = 1; next }
+              on && /^## / { exit }
+              on { print }
+            ' docs/changelog.md
+            echo
+            echo "---"
+            echo
+            echo "**入れ方**: \`sarari-$GITHUB_REF_NAME.zip\` を展開して「アプリケーション」に移し、[README のインストール](https://github.com/$GITHUB_REPOSITORY#インストール)の手順で開きます。Apple Silicon・macOS 14 以降。開発元の署名がないので、初回だけ Mac に止められます。"
+          } > build/release/notes.md
+          cat build/release/notes.md
+
+      - name: Releases に添付する
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip="build/release/sarari-$GITHUB_REF_NAME.zip"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            # 失敗したジョブの再実行では、既にあるリリースの zip だけ差し替える
+            gh release upload "$GITHUB_REF_NAME" "$zip" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$zip" \
+              --title "sarari $GITHUB_REF_NAME" --notes-file build/release/notes.md --verify-tag
+          fi
