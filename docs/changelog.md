@@ -4,7 +4,7 @@
 
 版ごとにまとめています。
 
-## 次の版
+## v0.2.0（2026-10-01）
 
 - **Xcode なしで入れられる**ようにしました。[Releases](https://github.com/kenta3578/sarari/releases/latest) の zip を展開して「アプリケーション」に移し、開くだけです（[#73](https://github.com/kenta3578/sarari/issues/73)）
 
