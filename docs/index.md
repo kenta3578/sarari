@@ -7,6 +7,9 @@ hero:
   tagline: 完全ローカルで動く、Mac 用の日本語音声入力アプリ。録音キー（最初は右 ⌥・変更可）を押して話し、もう一度押すと、カーソル位置に文字が入ります。
   actions:
     - theme: brand
+      text: ダウンロード
+      link: https://github.com/kenta3578/sarari/releases/latest
+    - theme: alt
       text: 説明書を読む
       link: /manual
     - theme: alt

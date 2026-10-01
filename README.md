@@ -32,17 +32,18 @@ LLM による整形、話しながら文字が出る表示、多言語対応は�
 
 ## インストール
 
-署名済みのバイナリはまだ配っていないので、ソースからビルドします。詳しくは [BUILD.md](BUILD.md)。
+1. [Releases](https://github.com/kenta3578/sarari/releases/latest) から `sarari-vX.Y.Z.zip` をダウンロードして開く（展開すると `sarari.app` ができる）
+2. `sarari.app` を「アプリケーション」フォルダに移す
+3. `sarari.app` を開く。「“sarari”は開いていません」と出たら「完了」を押す
+4. システム設定 › プライバシーとセキュリティ を開き、下の方の「“sarari”は Mac を保護するためにブロックされました」の横にある「このまま開く」を押す。確認が出たらもう一度「このまま開く」を押し、パスワードか Touch ID で許可する
 
-```bash
-brew install xcodegen
-git clone https://github.com/kenta3578/sarari.git
-cd sarari
-xcodegen generate
-open sarari.xcodeproj   # Signing & Capabilities で自分の Personal Team を選んで ⌘R
-```
+3〜4 は最初の 1 回だけです。Apple の開発者登録をしていないので、Mac は開発元を確かめられず一度止めます。ターミナルを使えるなら、2 のあとに `xattr -dr com.apple.quarantine /Applications/sarari.app` を打つと 3〜4 は要りません。
 
-初回はマイクとアクセシビリティの許可が要ります。ホットキーを押しても反応しないときは、システム設定 › プライバシーとセキュリティ › アクセシビリティ で sarari が ON になっているか見てください。
+起動するとメニューバーにマイクのアイコンが出ます。初回はマイクとアクセシビリティの許可が要ります。ホットキーを押しても反応しないときは、システム設定 › プライバシーとセキュリティ › アクセシビリティ で sarari が ON になっているか見てください。
+
+新しい版に入れ替えたあとは、アクセシビリティの許可が外れます（署名が版ごとに変わり、別のアプリとして扱われるため）。一覧の sarari を「−」で消してから、もう一度 ON にしてください。
+
+ソースからビルドする手順は [BUILD.md](BUILD.md) にあります。
 
 ## 使い方
 
