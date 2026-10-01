@@ -1,0 +1,88 @@
+# タグ vX.Y.Z を push したら sarari.app をビルドして zip にし、GitHub Releases に添付する（Issue #73）。
+# Xcode を持っていない人が、ダウンロードして開くだけで入れられるようにするため。
+# 署名はアドホック（Developer ID と公証は未対応。理由は RELEASING.md）。
+name: release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions: {} # 権限はジョブ側で必要な分だけ付ける
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # 既定の Apple 音声認識（SpeechAnalyzer）は macOS 26 SDK が要る
+    runs-on: macos-26
+    permissions:
+      contents: write # Releases の作成と添付
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: タグと MARKETING_VERSION が一致するか
+        # 一致しないと「v0.2.0 の zip を開くと 0.1.0 と名乗る」版ができる
+        run: |
+          declared="v$(sed -n 's/^ *MARKETING_VERSION: *"\(.*\)"/\1/p' project.yml)"
+          if [ "$declared" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::タグ $GITHUB_REF_NAME と project.yml の MARKETING_VERSION ($declared) が違う"
+            exit 1
+          fi
+
+      - name: 道具をそろえる
+        # ランナーの既定の Xcode は予告のうえで切り替わるので、版を明示して固定する
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+          brew install xcodegen
+
+      - name: ビルドして zip にする
+        run: ./scripts/build-release.sh "$GITHUB_REF_NAME"
+
+      - name: リリースノートを作る
+        # 更新履歴の「## vX.Y.Z（日付）」の節をそのまま使い、入れ方と必要な許可を添える（RELEASING.md「リリースノートに必ず書くこと」）
+        run: |
+          section=$(awk -v tag="$GITHUB_REF_NAME" '
+            index($0, "## " tag "（") == 1 { on = 1; next }
+            on && /^## / { exit }
+            on { print }
+          ' docs/changelog.md)
+          if [ -z "$(echo "$section" | tr -d '[:space:]')" ]; then
+            echo "::error::docs/changelog.md に「## ${GITHUB_REF_NAME}（日付）」の節が無い。「次の版」を改名してからタグを打つ"
+            exit 1
+          fi
+          {
+            echo "$section"
+            echo
+            echo "---"
+            echo
+            echo "**入れ方**: \`sarari-$GITHUB_REF_NAME.zip\` を展開して「アプリケーション」に移し、[README のインストール](https://github.com/$GITHUB_REPOSITORY#インストール)の手順で開きます。開発元の署名がないので、初回だけ Mac に止められます。"
+            echo
+            echo "- Apple Silicon の Mac 専用です"
+            echo "- macOS 26 以降は内蔵の音声認識を使い、ダウンロードは要りません。macOS 14〜15 では WhisperKit になり、初回に約 630MB のモデルを Hugging Face から取得します（これが唯一の通信です）"
+            echo "- アクセシビリティの許可が要ります。許可しないと録音キーを押しても反応しません。版を入れ替えたあとは許可を付け直してください"
+          } > build/release/notes.md
+          cat build/release/notes.md
+
+      - name: Releases に添付する
+        # 下書きで作って zip を付けてから公開する（Immutable releases を有効にしても通る順番）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          zip="build/release/sarari-$tag.zip"
+          draft=$(gh release view "$tag" --json isDraft -q .isDraft 2>/dev/null || echo none)
+          case "$draft" in
+            none)
+              gh release create "$tag" "$zip" --draft \
+                --title "sarari $tag" --notes-file build/release/notes.md --verify-tag ;;
+            true)
+              # 前回のジョブが公開前に落ちた。下書きの zip を差し替えて続ける
+              gh release upload "$tag" "$zip" --clobber ;;
+            *)
+              echo "::error::$tag は公開済み。版を上げて新しいタグを打つ"
+              exit 1 ;;
+          esac
+          gh release edit "$tag" --draft=false
