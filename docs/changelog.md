@@ -4,6 +4,10 @@
 
 版ごとにまとめています。
 
+## 次の版
+
+- 録音中、**入力カーソルの近くにペンギン**が出るようにしました。人に説明するつもりで話せるようにするための «話しかける相手» です。設定で消せます（[#86](https://github.com/kenta3578/sarari/issues/86)）
+
 ## v0.2.0（2026-10-01）
 
 - **Xcode なしで入れられる**ようにしました。[Releases](https://github.com/kenta3578/sarari/releases/latest) の zip を展開して「アプリケーション」に移し、開くだけです（[#73](https://github.com/kenta3578/sarari/issues/73)）

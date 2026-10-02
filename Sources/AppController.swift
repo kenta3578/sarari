@@ -13,6 +13,8 @@ final class AppController {
     private let hud = RecordingHUDController()
     /// 録音中に画面の縁を光らせる（Issue #48）。状態は自分で AppState から拾う。
     private let edgeGlow = EdgeGlowController()
+    /// 入力カーソルの近くに出す «話しかける相手»（Issue #86）。状態は自分で購読する。
+    private let penguin = ListenerPenguinController()
     private let state = AppState.shared
 
     /// 録音を始めた時点の最前面アプリ。挿入直前の照合に使う（Issue #80）。

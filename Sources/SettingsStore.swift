@@ -21,6 +21,11 @@ final class SettingsStore: ObservableObject {
     @Published var hudPosition: HUDPosition {
         didSet { UserDefaults.standard.set(hudPosition.rawValue, forKey: "hudPosition") }
     }
+    /// 録音中、入力カーソルの近くに «話しかける相手» のペンギンを出すか（Issue #86）。
+    /// 慣れて効かなくなったら外せるよう設定にしてある。
+    @Published var listenerPenguinEnabled: Bool {
+        didSet { UserDefaults.standard.set(listenerPenguinEnabled, forKey: "listenerPenguinEnabled") }
+    }
     /// 録音中に画面の縁を光らせるか（Issue #48）。HUD を見ていなくても録音中だと分かる。
     @Published var edgeGlowEnabled: Bool {
         didSet { UserDefaults.standard.set(edgeGlowEnabled, forKey: "edgeGlowEnabled") }
@@ -141,6 +146,7 @@ final class SettingsStore: ObservableObject {
         hudPosition = UserDefaults.standard.string(forKey: "hudPosition")
             .flatMap(HUDPosition.init(rawValue:)) ?? .bottomCenter
         edgeGlowEnabled = UserDefaults.standard.object(forKey: "edgeGlowEnabled") as? Bool ?? true
+        listenerPenguinEnabled = UserDefaults.standard.object(forKey: "listenerPenguinEnabled") as? Bool ?? true
         resultRetention = Self.storedResultRetention()
         let storedExtra = (UserDefaults.standard.object(forKey: "hotKeyExtraKeyCode") as? Int).flatMap(UInt16.init(exactly:))
         let storedModifiers = Self.storedHotKeyModifiers()
