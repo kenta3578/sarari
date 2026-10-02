@@ -54,6 +54,8 @@
 
 画面下に細いパネルが出ます。棒の動きと色で、いまの状態が分かります。
 
+左端の顔は «話しかける相手» です。機械に向かうより、人に説明するつもりのほうが言い直しや文の途切れが減ります。顔は動かず、状態も表しません。要らなければ設定の「録音HUD」→「話しかける相手の顔を出す」で消せます。
+
 | HUD | 状態 |
 |---|---|
 | <img class="shot light-only" src="./screens/hud-recording.png#gh-light-mode-only" width="280" alt="録音中の HUD。すみれ色の棒と経過時間"><img class="shot dark-only" src="./screens/hud-recording-dark.png#gh-dark-mode-only" width="280" alt="録音中の HUD。すみれ色の棒と経過時間"> | 録音中。棒が声の大きさで伸び縮みします（すみれ色） |

@@ -21,6 +21,11 @@ final class SettingsStore: ObservableObject {
     @Published var hudPosition: HUDPosition {
         didSet { UserDefaults.standard.set(hudPosition.rawValue, forKey: "hudPosition") }
     }
+    /// 録音 HUD に «話しかける相手» の顔を出すか（Issue #80）。機械ではなく人に説明する
+    /// つもりで話せるようにするためのもの。慣れて効かなくなったら外せるよう設定にしてある。
+    @Published var hudShowsListener: Bool {
+        didSet { UserDefaults.standard.set(hudShowsListener, forKey: "hudShowsListener") }
+    }
     /// 録音中に画面の縁を光らせるか（Issue #48）。HUD を見ていなくても録音中だと分かる。
     @Published var edgeGlowEnabled: Bool {
         didSet { UserDefaults.standard.set(edgeGlowEnabled, forKey: "edgeGlowEnabled") }
@@ -141,6 +146,7 @@ final class SettingsStore: ObservableObject {
         hudPosition = UserDefaults.standard.string(forKey: "hudPosition")
             .flatMap(HUDPosition.init(rawValue:)) ?? .bottomCenter
         edgeGlowEnabled = UserDefaults.standard.object(forKey: "edgeGlowEnabled") as? Bool ?? true
+        hudShowsListener = UserDefaults.standard.object(forKey: "hudShowsListener") as? Bool ?? true
         resultRetention = Self.storedResultRetention()
         let storedExtra = (UserDefaults.standard.object(forKey: "hotKeyExtraKeyCode") as? Int).flatMap(UInt16.init(exactly:))
         let storedModifiers = Self.storedHotKeyModifiers()

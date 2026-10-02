@@ -29,6 +29,9 @@ final class RecordingHUDModel: ObservableObject {
     /// 表示サイズは「最小」か「非表示」だけで、非表示は Controller がパネルごと出さない（Issue #6）。
     @Published var status: AppStatus = .idle
 
+    /// 最小表示の左端に «話しかける相手» の顔を出すか（Issue #80）。設定から注入する。
+    @Published var showsListener = true
+
     /// HUD にマウスが乗っているか。最小表示のとき、これで操作ボタンを出す（Issue #35）。
     @Published var isHovering = false
 
@@ -173,9 +176,9 @@ final class RecordingHUDModel: ObservableObject {
     var panelSize: CGSize {
         if pendingResult != nil { return HUDMetrics.resultPanelSize }
         if usesMinimalBar {
-            return isHovering
-                ? HUDMetrics.minimalHoverPanelSize
-                : HUDMetrics.minimalPanelSize
+            let base = isHovering ? HUDMetrics.minimalHoverPanelSize : HUDMetrics.minimalPanelSize
+            guard showsListener else { return base }
+            return CGSize(width: base.width + HUDMetrics.listenerExtraWidth, height: base.height)
         }
         return HUDMetrics.panelSize
     }
