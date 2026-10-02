@@ -93,7 +93,6 @@ final class RecordingHUDController {
     /// 環境が変わりうるところで必ずここを通す（Issue #65）。
     func syncEnvironment() {
         model.status = AppState.shared.status
-        model.showsListener = SettingsStore.shared.hudShowsListener
     }
 
     func applyLayout(positionChanged: Bool) {
