@@ -58,16 +58,18 @@ Mac（Apple Silicon）で、音声 → 文字起こし → カーソルへ直挿
 
 **「マージした」では終わらない。実機に入れて動かすまでが1サイクル。** 自分専用アプリなので、実機で使って初めて次のフィードバックが出る。
 
+**公開 OSS なので、develop へのマージはユーザーが手元で確かめてから。** 実機にはブランチの版を入れて試してもらい、OK をもらってからマージする。試して没になったものを develop に入れて戻すと、その跡が履歴と PR に残る（#83 → #84）。
+
 1. Issue を立てる（`category:*` / `priority:*` ラベル。本文は 問題 / 解決方針 / 完了条件）
 2. `EnterWorktree`（名前は `issue<N>`）で worktree を切って実装する。`.xcodeproj` は gitignore なので最初に `xcodegen generate`。型チェックは署名なしの Debug ビルド、**PR の前に `xcodebuild test` が通ること**（どちらも下の Commands）
-3. Issue 単位でコミット → PR（`Closes #N`）→ `gh pr merge --merge --delete-branch`
+3. Issue 単位でコミット → push → PR（`Closes #N`）を作る。**マージはまだしない**
    - **使う人から見て何かが変わる PR は、同じ PR の中で `docs/MANUAL.md` の該当する節を直し、`docs/changelog.md` の「次の版」に1行足す**（判定はそれだけ。中の作りだけの変更は載せない。見出しが無ければ先頭に作る）。サイト（GitHub Pages）に出るのは main に入ったとき
-4. `ExitWorktree`（remove）→ `git pull --ff-only origin develop`
-5. **`./scripts/install-local.sh`** で実機へ入れて起動する（Release ビルド → `koebun-dev` 署名 → `/Applications` 置換 → 起動）
-6. 実機で確認する。`pgrep -x sarari` で起動を確かめ、UI 変更はスクリーンショットで見る
+4. **worktree の中で `./scripts/install-local.sh`** を走らせ、ブランチの版を実機へ入れて起動する（Release ビルド → `koebun-dev` 署名 → `/Applications` 置換 → 起動）。`pgrep -x sarari` で起動を確かめ、UI 変更は自分でもスクリーンショットで見る
+5. ユーザーに確かめてもらう。**OK が出るまでマージしない。** 直しが要ればこの worktree で直して 4 に戻る。没なら PR を閉じる
+6. OK が出たら `gh pr merge --merge --delete-branch` → `ExitWorktree`（remove）→ `git pull --ff-only origin develop` → `./scripts/install-local.sh` で develop の版を入れ直す
 7. ユーザーの実機フィードバックは、その場で次の Issue にする（メモに溜めない）
 
-複数の小さな Issue は1つの worktree・1つの PR にまとめてよいが、**コミットは Issue 単位**に分ける。ドキュメントだけの変更は 5〜6 を省いてよい。
+複数の小さな Issue は1つの worktree・1つの PR にまとめてよいが、**コミットは Issue 単位**に分ける。ドキュメントだけの変更は 4〜5 と 6 の入れ直しを省いてよい。
 
 ## Release（develop → main）
 
