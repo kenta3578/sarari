@@ -189,10 +189,17 @@ struct GeneralSettingsView: View {
                     AppController.shared.refreshHUDLayout(positionChanged: true)
                 }
 
+                Toggle("話しかける相手の顔を出す", isOn: $settings.hudShowsListener)
+                    .disabled(settings.hudSize == .hidden)
+                    .onChange(of: settings.hudShowsListener) { _, _ in
+                        AppController.shared.refreshHUDLayout(positionChanged: false)
+                    }
+
                 Toggle("録音中は画面の縁を光らせる", isOn: $settings.edgeGlowEnabled)
 
                 Text("「最小」は声の大きさと経過時間だけの細いバーで、マウスを乗せると停止・キャンセルが出ます。"
                      + "録音を始めてもマイクが一度も音を拾わないときは、棒がオレンジのマイク斜線に替わります。"
+                     + "顔は、機械ではなく人に説明するつもりで話すための «相手» です（動きません）。"
                      + "「非表示」でも開始音・完了音は鳴ります"
                      + "（キャンセルは HUD からのみ。挿入できなかった結果は「挿入」の設定に従って表示します）。"
                      + "画面の縁は、マウスのある画面を録音中はすみれ色、文字起こし中は水色で光らせ、挿入できたら白く光って消えます。")
