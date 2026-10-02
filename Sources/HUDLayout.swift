@@ -59,10 +59,6 @@ enum HUDMetrics {
     /// 最小表示にマウスが乗って、停止・キャンセルが出ているときのサイズ。
     /// ボタン 2 つぶんの 60pt を足す（`minimalPanelSize` を大きくしても、ボタンの余白は変えない）。
     static let minimalHoverPanelSize = CGSize(width: 204, height: 34)
-    /// 話しかける相手（顔）を出すときに最小表示へ足す幅（Issue #80）。顔の幅＋隣との間隔。
-    /// 顔の直径は View ではなくここに置く（View の静的値は MainActor に隔離されるため）。
-    static let listenerDiameter: CGFloat = 22
-    static let listenerExtraWidth: CGFloat = listenerDiameter + 6
     /// 挿入結果を残しているときのサイズ（本文＋操作ボタンぶん高くする）。
     static let resultPanelSize = CGSize(width: 380, height: 160)
 }

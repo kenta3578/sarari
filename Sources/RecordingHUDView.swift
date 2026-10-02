@@ -62,9 +62,6 @@ struct RecordingHUDView: View {
     // 停止・キャンセルはホバーで出す＝常時は場所を取らない。
     private var minimalContent: some View {
         HStack(spacing: 6) {
-            if model.showsListener {
-                ListenerFaceView()
-            }
             minimalIndicator
             // 11 → 13pt（Issue #191）→ 12pt（#195 の候補 A。13pt は «大きすぎる»）。
             // «12:34» の 5 文字でも折り返さないよう 1 行に固定し、収まらないときだけ少し縮める。
@@ -248,37 +245,6 @@ struct RecordingHUDView: View {
         .buttonStyle(.borderless)
         .help(help)
         .accessibilityLabel(help)
-    }
-}
-
-/// 最小表示の左端に置く «話しかける相手»（Issue #80）。
-///
-/// 音声入力だと意識すると、言い直しや文の途中の «。» が増える。顔が見えていると、人に
-/// 説明するつもりで文を組み立ててから話しやすくなる。**役目はそれだけ**なので、
-/// 状態も声の大きさも示さない——**動かさない・色を変えない**（#146〜#178 で、HUD に
-/// 合図を重ねるほど読めなくなった）。状態は右隣の棒が持つ。
-struct ListenerFaceView: View {
-    /// 顔（丸）の直径。パネル（高さ 34）の上下に 6pt 残す。
-    static var diameter: CGFloat { HUDMetrics.listenerDiameter }
-    /// 目の大きさと間隔。縦長にして «こちらを見ている» 顔に読ませる。
-    static let eyeSize = CGSize(width: 3, height: 6)
-    static let eyeSpacing: CGFloat = 5
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(Color.primary.opacity(0.08))
-            HStack(spacing: Self.eyeSpacing) {
-                Capsule(style: .continuous)
-                    .frame(width: Self.eyeSize.width, height: Self.eyeSize.height)
-                Capsule(style: .continuous)
-                    .frame(width: Self.eyeSize.width, height: Self.eyeSize.height)
-            }
-            .foregroundStyle(Color.primary.opacity(0.7))
-            .offset(y: -1)
-        }
-        .frame(width: Self.diameter, height: Self.diameter)
-        .accessibilityHidden(true)
     }
 }
 
