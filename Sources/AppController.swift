@@ -13,6 +13,8 @@ final class AppController {
     private let hud = RecordingHUDController()
     /// 録音中に画面の縁を光らせる（Issue #48）。状態は自分で AppState から拾う。
     private let edgeGlow = EdgeGlowController()
+    /// 録音中だけ他のアプリの音楽を止める（Issue #88）。
+    private let mediaPauser = MediaPauser()
     private let state = AppState.shared
 
     /// 録音を始めた時点の最前面アプリ。挿入直前の照合に使う（Issue #80）。
@@ -193,6 +195,8 @@ final class AppController {
         do {
             // 挿入先は録音開始の**前**に控える。NSWorkspace だけなので AX 権限も要らず軽い。
             pendingBundleId = TextInjector.frontmostBundleId()
+            // 開始音より前に止める（音楽が入らないうちに録音を始めるため）。
+            mediaPauser.pauseIfPlaying()
 
             try recorder.start()
             state.update(.recording)
@@ -204,6 +208,7 @@ final class AppController {
             // 録音・文字起こしには触らない。
             hud.ignoreLevels(forSoundOf: SoundPlayer.play(start))
         } catch {
+            mediaPauser.resumeIfPaused()
             state.update(.failed(reason: "録音開始失敗: \(error.localizedDescription)"))
         }
     }
@@ -220,6 +225,7 @@ final class AppController {
         let expectedBundleId = takePendingBundleId()
         SoundPlayer.play(SettingsStore.shared.stopSound)
         let samples = recorder.stop()
+        mediaPauser.resumeIfPaused()
         // ここで読んで戻す（この録音ぶんの事情なので、次の録音へ持ち越さない）。
         let deviceChanged = audioDeviceChangedDuringRecording
         audioDeviceChangedDuringRecording = false
@@ -386,6 +392,7 @@ final class AppController {
     private func cancelRecording() {
         guard state.isRecording else { return }
         _ = recorder.stop()
+        mediaPauser.resumeIfPaused()
         pendingBundleId = nil
         audioDeviceChangedDuringRecording = false
         recordingLimitReached = false
