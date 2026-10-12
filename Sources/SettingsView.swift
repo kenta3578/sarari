@@ -86,6 +86,7 @@ struct GeneralSettingsView: View {
             Section("サウンド") {
                 soundRow("録音開始音", selection: $settings.startSound)
                 soundRow("録音停止音", selection: $settings.stopSound)
+                Toggle("録音中は再生中の音楽を一時停止する", isOn: $settings.pauseMediaWhileRecording)
 
                 HStack {
                     Button("音を追加…") { importSounds() }

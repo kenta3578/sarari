@@ -25,6 +25,11 @@ final class SettingsStore: ObservableObject {
     @Published var edgeGlowEnabled: Bool {
         didSet { UserDefaults.standard.set(edgeGlowEnabled, forKey: "edgeGlowEnabled") }
     }
+    /// 録音中は他のアプリが流している音楽を一時停止するか（Issue #88）。
+    /// 既定は切り（再生/一時停止キーを送るので、意図しないアプリに届く可能性がある）。
+    @Published var pauseMediaWhileRecording: Bool {
+        didSet { UserDefaults.standard.set(pauseMediaWhileRecording, forKey: "pauseMediaWhileRecording") }
+    }
     /// 挿入できなかった結果をどこに残すか（Issue #67）。
     ///
     /// 以前は `showResultPanel` と `keepResultOnClipboardWhenUnsure` の 2 つの Bool に
@@ -141,6 +146,7 @@ final class SettingsStore: ObservableObject {
         hudPosition = UserDefaults.standard.string(forKey: "hudPosition")
             .flatMap(HUDPosition.init(rawValue:)) ?? .bottomCenter
         edgeGlowEnabled = UserDefaults.standard.object(forKey: "edgeGlowEnabled") as? Bool ?? true
+        pauseMediaWhileRecording = UserDefaults.standard.bool(forKey: "pauseMediaWhileRecording")
         resultRetention = Self.storedResultRetention()
         let storedExtra = (UserDefaults.standard.object(forKey: "hotKeyExtraKeyCode") as? Int).flatMap(UInt16.init(exactly:))
         let storedModifiers = Self.storedHotKeyModifiers()

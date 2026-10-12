@@ -4,6 +4,10 @@
 
 版ごとにまとめています。
 
+## 次の版
+
+- 設定で入りにすると、**録音中は流れている音楽を一時停止**し、録音が終わったら再開します（[#88](https://github.com/kenta3578/sarari/issues/88)）
+
 ## v0.2.0（2026-10-01）
 
 - **Xcode なしで入れられる**ようにしました。[Releases](https://github.com/kenta3578/sarari/releases/latest) の zip を展開して「アプリケーション」に移し、開くだけです（[#73](https://github.com/kenta3578/sarari/issues/73)）
