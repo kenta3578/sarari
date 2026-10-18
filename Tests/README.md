@@ -24,6 +24,7 @@ AppKit の実画面・モデル・TCC に依存しない **純 Swift のロジ�
 | `FailureHintTests` | 失敗の手がかりの契約（ボタンを出す／出さない・状態まで運ばれるか） |
 | `ResultRetentionTests` | 挿入できなかった結果の残し先。履歴が必ず含まれること・保存値の綴り |
 | `ReplacementsTests` | 辞書置換の 1 パス最長一致。ルールファイルの取り込み（重複を飛ばす・壊れた JSON は足さない）と、配布する語彙セット（`presets/`）が一般の語を壊さないこと |
+| `SoundVolumeTests` | 効果音の倍率。本体の音量を上げても聞こえる大きさが一定・本体より大きくはしない（Issue #90） |
 | `FillerRemoverTests` | フィラー除去。「残す」側（指示語・連語）を重点的に |
 | `QuestionMarkerTests` | 疑問文の文末の？補完。付けすぎない側（かな・ません）も見る |
 | `RuleImpactTests` | 辞書ルールを足したときの過去の発話への影響。誤爆が例に出るか |
