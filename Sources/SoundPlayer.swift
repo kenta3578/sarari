@@ -68,15 +68,21 @@ enum SoundPlayer {
     @discardableResult
     static func play(_ name: String) -> TimeInterval {
         guard name != none else { return 0 }
+        // 本体の音量に引きずられないよう、鳴らすたびに倍率を決め直す（Issue #90）。
+        let volume = SoundVolume.gain(
+            target: SettingsStore.shared.soundVolume, system: SoundVolume.systemOutputVolume())
         // 同名なら手元で作り直した音を優先する（make-sounds.py で調整して試せるように）。
         if let url = customFileURL(for: name) ?? bundledFileURL(for: name) {
             // 前の再生が終わる前に次を鳴らしても切れないよう、毎回インスタンスを作る。
             let sound = NSSound(contentsOf: url, byReference: true)
+            sound?.volume = volume
             sound?.play()
             retain(sound)
             return sound?.duration ?? 0
         } else {
+            // 名前で引いた NSSound は共有インスタンスなので、音量は毎回上書きする。
             let sound = NSSound(named: .init(name))
+            sound?.volume = volume
             sound?.play()
             return sound?.duration ?? 0
         }
