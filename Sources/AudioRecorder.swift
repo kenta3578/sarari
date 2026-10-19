@@ -52,16 +52,14 @@ final class AudioRecorder {
     /// 構成変更の通知を受けた。次の `start()` でエンジンを作り直す。
     private var engineIsStale = false
 
-    /// このエンジンで最初に録音したときの既定入力機器。通知を取りこぼしても、
+    /// このエンジンで録っている機器。通知を取りこぼしても、
     /// 機器が変わったことをここで気づける。
     private var engineDevice: InputDevice?
 
-    /// 既定入力機器と、その公称サンプルレート。AirPods のように同じ機器のまま
-    /// レートだけ変わる（48kHz ⇄ 16kHz）こともあるので、両方で比べる。
-    private struct InputDevice: Equatable {
-        let id: AudioDeviceID
-        let sampleRate: Float64
-    }
+    /// 入力機器を指定すると、エンジンは動いたまま構成変更の通知が 1 回届く（約 90ms 後、実測）。
+    /// これを機器の切り替えと取り違えないよう、指定した直後のしばらくは無視する（Issue #94）。
+    private var ignoreConfigurationChangesUntil: Date = .distantPast
+    private static let pinSettleTime: TimeInterval = 0.5
 
     /// tap を張っているか。`removeTap` の呼び忘れ・二重呼び出しの両方を防ぐ唯一の真実。
     ///
@@ -112,6 +110,8 @@ final class AudioRecorder {
             // ブロック自体は @Sendable なので、隔離済みであることを明示してから触る。
             MainActor.assumeIsolated {
                 guard let self else { return }
+                // 自分で機器を指定したときの通知。エンジンが止まっていなければ何も壊れていない。
+                if Date() < self.ignoreConfigurationChangesUntil, self.engine.isRunning { return }
                 // 録音していなくても、形式は古くなっている。次の録音で作り直す。
                 self.engineIsStale = true
                 // 録音していないときの切り替えは通知しない（起動時やデバイス整理で普通に飛ぶ）。
@@ -130,27 +130,6 @@ final class AudioRecorder {
         observeConfigurationChanges()
     }
 
-    /// システムの既定入力機器。取れなければ nil。
-    private static func defaultInputDevice() -> InputDevice? {
-        var id = AudioDeviceID(kAudioObjectUnknown)
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &id
-        )
-        guard status == noErr, id != kAudioObjectUnknown else { return nil }
-
-        var rate = Float64(0)
-        size = UInt32(MemoryLayout<Float64>.size)
-        address.mSelector = kAudioDevicePropertyNominalSampleRate
-        guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, &rate) == noErr else { return nil }
-        return InputDevice(id: id, sampleRate: rate)
-    }
-
     deinit {
         if let configurationObserver {
             NotificationCenter.default.removeObserver(configurationObserver)
@@ -163,20 +142,20 @@ final class AudioRecorder {
 
         buffer.withLock { $0 = TapBuffer() }
 
-        let device = Self.defaultInputDevice()
+        let device = InputDeviceSelector.current()
         if engineIsStale {
             rebuildEngine(reason: "構成変更の通知")
         } else if let engineDevice, engineDevice != device {
-            rebuildEngine(reason: "既定の入力機器が変わった")
+            rebuildEngine(reason: "入力機器が変わった")
         }
-        if engineDevice == nil { engineDevice = device }
+        if engineDevice == nil { bind(to: device) }
 
         var input = engine.inputNode
         // 機器側（inputFormat）とエンジン側（outputFormat）のレートがずれていたら、
         // そのまま installTap すると例外で落ちる。一度だけ作り直して確かめ直す。
         if Self.ratesDiffer(input) {
             rebuildEngine(reason: "機器とエンジンのサンプルレートが違う")
-            engineDevice = device
+            bind(to: device)
             input = engine.inputNode
             guard !Self.ratesDiffer(input) else { throw AudioRecorderError.deviceSwitching }
         }
@@ -214,6 +193,25 @@ final class AudioRecorder {
             teardown()
             throw error
         }
+    }
+
+    /// 作ったばかりのエンジンを `device` で録るようにする。指定が要るのは内蔵マイクへ
+    /// 差し替えるときだけで、それ以外は既定のマイクに任せる（Issue #94）。
+    private func bind(to device: InputDevice?) {
+        engineDevice = device
+        guard let device, device.isPinned, let unit = engine.inputNode.audioUnit else { return }
+        var id = device.id
+        let status = AudioUnitSetProperty(
+            unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
+            &id, UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+        guard status == noErr else {
+            // 指定できなくても既定のマイクで録れる（ヘッドホンは通話モードに入るが、録音は続く）。
+            Log.audio.error("内蔵マイクを指定できませんでした: \(status)")
+            return
+        }
+        ignoreConfigurationChangesUntil = Date().addingTimeInterval(Self.pinSettleTime)
+        Log.audio.info("既定のマイクが Bluetooth のため、内蔵マイクで録音します")
     }
 
     /// 入力ノードの機器側とエンジン側でサンプルレートが違うか。どちらかが 0（機器なし）なら

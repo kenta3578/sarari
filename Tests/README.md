@@ -18,6 +18,7 @@ AppKit の実画面・モデル・TCC に依存しない **純 Swift のロジ�
 | `PipelineGuardTests` | 世代番号ガード（追い越し・退避キュー・replay。Issue #97 / #100） |
 | `DictationPipelineTests` | 文字起こし → 辞書置換 → フィラー除去 の順序と計時（Issue #66。フェイクのエンジンと固定した時計で） |
 | `InsertionPresentationTests` | 挿入結果 → メニューバー状態と HUD の動き（`.claude/rules/insertion-feedback.md`） |
+| `InputDeviceSelectorTests` | 録音に使うマイクの選び方（既定が Bluetooth なら内蔵マイク。蓋を閉じている・内蔵が無いときは既定のまま。Issue #94） |
 | `RecordingLimitTests` | 録音の上限で止めた発話の見せ方（挿入しない・クリップボードを案内しない。Issue #17） |
 | `TranscriberPathTests` | WhisperKit のモデルの保存先（書類フォルダに置かない・HubApi の並びに合わせる。Issue #23） |
 | `HistoryEntryTests` | `meta.json` の互換。**整形系の列を持つ古い記録が読めること**（#128〜#131 で書く側だけ消した） |
