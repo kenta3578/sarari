@@ -31,10 +31,6 @@ struct MenuContent: View {
 
         Divider()
 
-        // 録音が始まらないなど調子が悪いときの逃げ道。設定・辞書・履歴は消えない（Issue #91）。
-        Button("再起動") {
-            AppRelauncher.relaunch()
-        }
         Button("終了") {
             NSApp.terminate(nil)
         }
