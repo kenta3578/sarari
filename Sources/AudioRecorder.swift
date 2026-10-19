@@ -1,6 +1,5 @@
 @preconcurrency import AVFAudio
 import AVFoundation
-import CoreAudio
 import os
 
 /// 録音を始められない理由。**原因がユーザーに読める形で伝わる**ようにする
@@ -10,8 +9,6 @@ enum AudioRecorderError: LocalizedError {
     case noInputDevice
     /// 入力フォーマットを 16kHz / mono / Float32 に変換できない。
     case unsupportedInputFormat(sampleRate: Double, channels: AVAudioChannelCount)
-    /// エンジンを作り直しても、マイクの実際の形式とエンジンの形式が揃わない（切り替えの途中）。
-    case deviceSwitching
 
     var errorDescription: String? {
         switch self {
@@ -19,8 +16,6 @@ enum AudioRecorderError: LocalizedError {
             return "マイクが見つかりません。入力デバイスを接続して、システム設定で選んでください。"
         case let .unsupportedInputFormat(sampleRate, channels):
             return "このマイクの形式（\(Int(sampleRate))Hz / \(channels)ch）は変換できません。"
-        case .deviceSwitching:
-            return "マイクの切り替え中です。少し待ってからもう一度押してください。"
         }
     }
 }
@@ -43,25 +38,7 @@ final class AudioRecorder {
     }
     private let buffer = OSAllocatedUnfairLock(initialState: TapBuffer())
 
-    /// **機器が変わったら作り直す**（Issue #91）。使い回すと `inputNode` が切り替え前の
-    /// 機器の形式を返し続け、`installTap` が `Failed to create tap due to format mismatch` の
-    /// Objective-C 例外を投げる。catch できないうえ、作り直すまで毎回同じ例外になるので
-    /// 「一度こうなると再起動するまで録音できない」状態になっていた。
-    private var engine = AVAudioEngine()
-
-    /// 構成変更の通知を受けた。次の `start()` でエンジンを作り直す。
-    private var engineIsStale = false
-
-    /// このエンジンで最初に録音したときの既定入力機器。通知を取りこぼしても、
-    /// 機器が変わったことをここで気づける。
-    private var engineDevice: InputDevice?
-
-    /// 既定入力機器と、その公称サンプルレート。AirPods のように同じ機器のまま
-    /// レートだけ変わる（48kHz ⇄ 16kHz）こともあるので、両方で比べる。
-    private struct InputDevice: Equatable {
-        let id: AudioDeviceID
-        let sampleRate: Float64
-    }
+    private let engine = AVAudioEngine()
 
     /// tap を張っているか。`removeTap` の呼び忘れ・二重呼び出しの両方を防ぐ唯一の真実。
     ///
@@ -95,14 +72,6 @@ final class AudioRecorder {
     )!
 
     init() {
-        observeConfigurationChanges()
-    }
-
-    /// 今の `engine` の構成変更を購読する。エンジンを作り直すたびに張り替える。
-    private func observeConfigurationChanges() {
-        if let configurationObserver {
-            NotificationCenter.default.removeObserver(configurationObserver)
-        }
         configurationObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
             object: engine,
@@ -111,44 +80,11 @@ final class AudioRecorder {
             // `queue: .main` を指定しているのでこのブロックはメインスレッドで届く。
             // ブロック自体は @Sendable なので、隔離済みであることを明示してから触る。
             MainActor.assumeIsolated {
-                guard let self else { return }
-                // 録音していなくても、形式は古くなっている。次の録音で作り直す。
-                self.engineIsStale = true
                 // 録音していないときの切り替えは通知しない（起動時やデバイス整理で普通に飛ぶ）。
-                guard self.isTapInstalled else { return }
+                guard let self, self.isTapInstalled else { return }
                 self.onConfigurationChange?()
             }
         }
-    }
-
-    /// エンジンを新しく作り直す。tap は外してある前提（`teardown()` の後に呼ぶ）。
-    private func rebuildEngine(reason: String) {
-        Log.audio.notice("オーディオエンジンを作り直します（\(reason, privacy: .public)）")
-        engine = AVAudioEngine()
-        engineIsStale = false
-        engineDevice = nil
-        observeConfigurationChanges()
-    }
-
-    /// システムの既定入力機器。取れなければ nil。
-    private static func defaultInputDevice() -> InputDevice? {
-        var id = AudioDeviceID(kAudioObjectUnknown)
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &id
-        )
-        guard status == noErr, id != kAudioObjectUnknown else { return nil }
-
-        var rate = Float64(0)
-        size = UInt32(MemoryLayout<Float64>.size)
-        address.mSelector = kAudioDevicePropertyNominalSampleRate
-        guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, &rate) == noErr else { return nil }
-        return InputDevice(id: id, sampleRate: rate)
     }
 
     deinit {
@@ -163,23 +99,7 @@ final class AudioRecorder {
 
         buffer.withLock { $0 = TapBuffer() }
 
-        let device = Self.defaultInputDevice()
-        if engineIsStale {
-            rebuildEngine(reason: "構成変更の通知")
-        } else if let engineDevice, engineDevice != device {
-            rebuildEngine(reason: "既定の入力機器が変わった")
-        }
-        if engineDevice == nil { engineDevice = device }
-
-        var input = engine.inputNode
-        // 機器側（inputFormat）とエンジン側（outputFormat）のレートがずれていたら、
-        // そのまま installTap すると例外で落ちる。一度だけ作り直して確かめ直す。
-        if Self.ratesDiffer(input) {
-            rebuildEngine(reason: "機器とエンジンのサンプルレートが違う")
-            engineDevice = device
-            input = engine.inputNode
-            guard !Self.ratesDiffer(input) else { throw AudioRecorderError.deviceSwitching }
-        }
+        let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
         // 入力デバイスが無いと sampleRate 0 / channelCount 0 が返る。検証せずに
         // installTap へ渡すと AVAudioEngine が不正フォーマットで例外を投げる（Issue #77）。
@@ -214,15 +134,6 @@ final class AudioRecorder {
             teardown()
             throw error
         }
-    }
-
-    /// 入力ノードの機器側とエンジン側でサンプルレートが違うか。どちらかが 0（機器なし）なら
-    /// 違うとは見なさない（その場合は `noInputDevice` で扱う）。
-    private static func ratesDiffer(_ input: AVAudioInputNode) -> Bool {
-        let hardware = input.inputFormat(forBus: 0).sampleRate
-        let client = input.outputFormat(forBus: 0).sampleRate
-        guard hardware > 0, client > 0 else { return false }
-        return hardware != client
     }
 
     /// 録音を止めて蓄積済みサンプルを返す。
