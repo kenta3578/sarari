@@ -211,7 +211,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 | `@MainActor` | `AppController` / `AppState` / `SettingsStore` / `TextInjector` / HUD 一式 | UI と状態はすべてメインに閉じる |
 | 実時間スレッド | `AudioRecorder` の tap ブロック | `[Float]` にコピーして渡すだけ。`await` しない |
 | 構造化されない `Task` | `runPipeline` | ハンドルを `lastPipeline` に保持し、次の発話が `await` する |
-| 直列化 | `TextInjector.insert` | 入口で前の挿入を `await`（HUD・履歴からの再挿入も同じ口を通る） |
+| 直列化 | `TextInjector.insert` | 入口で前の挿入を、クリップボードの復元が終わるまで `await`（HUD・履歴からの再挿入も同じ口を通る） |
 
 ビルド設定は `SWIFT_STRICT_CONCURRENCY: complete`。**警告 0 を保つ**のがこのリポジトリの決まりで、`@unchecked Sendable` を増やす代わりに `@MainActor` か actor に閉じる。
 
@@ -219,7 +219,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 
 ## 7. テスト
 
-`Tests/` は **AppKit・実モデル・TCC に依存しない純 Swift のロジックだけ**を見る（130 ケース・実行 0.1 秒未満）。権限ダイアログもモデルのダウンロードも起きない（`AppDelegate` がテスト起動を検知して何も始めないため）。
+`Tests/` は **AppKit・実モデル・TCC に依存しない純 Swift のロジックだけ**を見る（130 ケース・実行 1 秒未満。大半はクリップボードの復元を待つ `TextInjectorClipboardTests`）。権限ダイアログもモデルのダウンロードも起きない（`AppDelegate` がテスト起動を検知して何も始めないため）。
 
 ```bash
 xcodebuild test -project sarari.xcodeproj -scheme sarari \
