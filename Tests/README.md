@@ -34,7 +34,7 @@ AppKit の実画面・モデル・TCC に依存しない **純 Swift のロジ�
 | `DataDirectoryTests` | 旧名の置き場 `~/koemakase`・`~/koebun` からの移行。新しい置き場があれば触らない。旧名が2つあれば新しい名前の方を移す |
 | `PasteboardTests` | 全 type の退避と復元（名前付きペーストボードで隔離） |
 | `PasteboardMarkerTests` | クリップボードに立てる目印。挿入用（4 つ）とユーザーのコピー（Concealed のみ）の違い |
-| `InsertionTargetTests` | 録音開始時と挿入直前の挿入先の比較。別のアプリ・窓・タブなら止める／読めない側は比べない／開始時に sarari が前面なら止める。`TextInjectorTargetTests` は止めたときに ⌘V を送らないこと（Issue #107。AX 要素は `AXUIElementCreateApplication(pid)` で作る） |
+| `InsertionTargetTests` | 録音を止めたときと挿入直前の挿入先の比較。別のアプリ・窓・タブなら止める／読めない側は比べない／止めたときに sarari が前面なら止める。`TextInjectorTargetTests` は止めたときに ⌘V を送らないこと（Issue #107。AX 要素は `AXUIElementCreateApplication(pid)` で作る） |
 | `TextInjectorClipboardTests` | 続けて挿入しても、借りたクリップボードが1回目の前の内容に戻る（元が空なら空に、判定待ちの間に終了しても）。復元が送出より先に走らない順序。途中でユーザーがコピーした分は踏み潰さない。本物の待ち時間（250ms）が足りるかは見ていない（Issue #105。名前付きペーストボードとフェイクの送出で） |
 | `HotKeyJudgeTests` | 修飾キーの左右区別・合成イベント・複数修飾キーの正規化 |
 | `LevelBarsTests` | 最小表示の棒（7 本）。黙ると点、声で高くなり、文字起こし中は波形の形で止まる。音節の切れ目で潰れない |

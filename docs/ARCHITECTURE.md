@@ -18,7 +18,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 
 右⌥ 押下（1 回目）
   HotKeyManager                   CGEventTap で修飾キーだけを見て onToggle を呼ぶ
-  AppController.startRecording()  世代番号を進める / 録音を始めたあと挿入先（アプリ・窓・入力欄）を控える
+  AppController.startRecording()  世代番号を進める
   AudioRecorder.start()           AVAudioEngine の installTap。16kHz・mono・Float32 に変換して溜める
   RecordingHUDController.show()   HUD を出す（NSPanel）
   SoundPlayer.play(start)         開始音。鳴っている間ぶんは HUD のレベルを無視する
@@ -26,6 +26,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 
 右⌥ 押下（2 回目）
   AppController.stopRecording()   ここは同期のまま短く保つ（挿入の順番待ちに並ぶのが先）
+                                  止めた時点の挿入先（アプリ・窓・入力欄）を控える
   AudioRecorder.stop()            溜めたサンプルを返してタップを外す
   ↓ 以降は Task の中（AppController.runPipeline）
 
@@ -93,7 +94,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 | ファイル | 行 | 役割 |
 |---|---:|---|
 | `TextInjector.swift` | 545 | **挿入の本体**。前面照合・セキュア入力回避・⌘V 合成・成否判定・クリップボード復元 |
-| `InsertionTarget.swift` | 47 | 挿入先（前面アプリ・窓・入力欄）と、録音開始時から変わったかの判定。AppKit なしの純関数 |
+| `InsertionTarget.swift` | 50 | 挿入先（前面アプリ・窓・入力欄）と、録音を止めたときから変わったかの判定。AppKit なしの純関数 |
 | `Pasteboard.swift` | 69 | クリップボードの「機密・一時」目印（nspasteboard.org の慣習）と全 type のスナップショット |
 | `InsertionPresentation.swift` | 63 | 挿入結果 → メニューバー状態 ＋ HUD の動き。**1 か所で導出**して二重分岐を防ぐ |
 
