@@ -3,7 +3,10 @@ import ApplicationServices
 import Testing
 @testable import sarari
 
-/// 録音を始めたときと挿入の直前で、挿入先が変わっていないかの判定（Issue #107）。
+/// 録音を止めたときと挿入の直前で、挿入先が変わっていないかの判定（Issue #107）。
+///
+/// 基準は「止めた時点」。始めた場所と別の所へ移ってから止める使い方があるため、
+/// 守るのは止めてから貼るまで（文字起こしの数秒）の移動だけ。
 ///
 /// AX の要素は `AXUIElementCreateApplication(pid)` で作る。権限が無くても作れて、
 /// 同じ pid なら `CFEqual` で等しく、違う pid なら等しくない。窓・入力欄の「別物」をこれで表す。
@@ -32,7 +35,7 @@ struct InsertionTargetTests {
         #expect(InsertionTarget.mismatchReason(expected: start, current: now) == nil)
     }
 
-    @Test("開始時に窓も入力欄も読めなかったアプリは、アプリが同じなら挿入する")
+    @Test("止めたときに窓も入力欄も読めなかったアプリは、アプリが同じなら挿入する")
     func unreadableAtStartFallsBackToApp() {
         let start = target(Self.editor)
         let now = target(Self.editor, window: 1, element: 10)
@@ -44,7 +47,7 @@ struct InsertionTargetTests {
         let start = target(Self.editor, window: 1, element: 10)
         #expect(InsertionTarget.mismatchReason(expected: start, current: target(Self.editor)) == nil)
         #expect(InsertionTarget.mismatchReason(expected: start, current: target(Self.editor, window: 1)) == nil)
-        // 逆向き: 開始時に入力欄だけ読めなかった。
+        // 逆向き: 止めたときに入力欄だけ読めなかった。
         #expect(InsertionTarget.mismatchReason(expected: target(Self.editor, window: 1),
                                                current: target(Self.editor, window: 1, element: 10)) == nil)
     }
@@ -74,13 +77,13 @@ struct InsertionTargetTests {
         let start = target(Self.editor, window: 1, element: 10)
         let now = target(Self.editor, window: 1, element: 11)
         #expect(InsertionTarget.mismatchReason(expected: start, current: now) != nil)
-        // 開始時に窓だけ読めなくても、入力欄が違えば止める。
+        // 止めたときに窓だけ読めなくても、入力欄が違えば止める。
         #expect(InsertionTarget.mismatchReason(expected: target(Self.editor, element: 10),
                                                current: target(Self.editor, window: 1, element: 11)) != nil)
     }
 
-    @Test("録音を始めたとき sarari 自身が前面だったら、照合を飛ばさずに挿入しない")
-    func startedOnSarariIsRejected() {
+    @Test("録音を止めたとき sarari 自身が前面だったら、照合を飛ばさずに挿入しない")
+    func stoppedOnSarariIsRejected() {
         let start = target(nil)
         #expect(InsertionTarget.mismatchReason(expected: start, current: target(Self.editor, window: 1, element: 10)) != nil)
         #expect(InsertionTarget.mismatchReason(expected: start, current: target(nil)) != nil)
@@ -126,7 +129,7 @@ struct TextInjectorTargetTests {
 
     private func element(_ id: Int32) -> AXUIElement { AXUIElementCreateApplication(id) }
 
-    @Test("録音中に同じアプリの別のタブへ移ったら、送らずに失敗を返す")
+    @Test("止めたあと文字起こし中に同じアプリの別のタブへ移ったら、送らずに失敗を返す")
     func switchedTabIsNotDelivered() async {
         let start = InsertionTarget(bundleId: "com.example.editor", window: element(1), element: element(10))
         let h = Harness(current: InsertionTarget(bundleId: "com.example.editor", window: element(1), element: element(11)))
