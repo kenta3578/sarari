@@ -21,6 +21,8 @@ jobs:
       contents: write # Releases の作成と添付
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # ビルド中に動く依存へトークンを見せない。Releases へは gh に env で渡す
 
       - name: タグと MARKETING_VERSION が一致するか
         # 一致しないと「v0.2.0 の zip を開くと 0.1.0 と名乗る」版ができる
