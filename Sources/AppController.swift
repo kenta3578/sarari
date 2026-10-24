@@ -226,6 +226,9 @@ final class AppController {
         audioDeviceChangedDuringRecording = false
         let limitReached = recordingLimitReached
         recordingLimitReached = false
+        // **ユーザーが待つ実時間**をここから測る（Issue #107）。履歴の `durations` は
+        // 処理ごとの内訳だが、こちらは挿入先を控える AX の待ちと挿入の順番待ちも含む「押してから入るまで」。
+        let signpost = Log.signposter.beginInterval("dictation", id: Log.signposter.makeSignpostID())
         // 挿入先は**止めた時点**の前面アプリ・窓・入力欄（Issue #107）。始めた場所と別の所へ
         // 移ってから止め、そこへ入れる使い方があるので、録音開始時ではなくここで控える。
         // 守るのは、止めてから貼るまで（文字起こしの数秒）に別の場所へ移ったときの誤爆。
@@ -233,10 +236,6 @@ final class AppController {
         // 上限で止めた録音は挿入しないので取らない。
         let expectedTarget = limitReached ? nil : TextInjector.currentTarget()
         cancelRecordingLimit()
-
-        // **ユーザーが待つ実時間**をここから測る（Issue #107）。履歴の `durations` は
-        // 処理ごとの内訳だが、こちらは挿入の順番待ちも含む「押してから入るまで」。
-        let signpost = Log.signposter.beginInterval("dictation", id: Log.signposter.makeSignpostID())
 
         let previousPipeline = lastPipeline
         state.pipelineStarted()

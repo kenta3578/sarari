@@ -182,7 +182,8 @@ final class TextInjector {
         if let expectedTarget,
            let reason = InsertionTarget.mismatchReason(expected: expectedTarget,
                                                        current: environment.currentTarget()) {
-            if keepResult {
+            // 移った先がパスワード欄なら、クリップボードにも残さない（Issue #104 と同じ理由）。
+            if keepResult, environment.secureInputReason() == nil {
                 write(text, purpose: .injection)
             }
             return Attempt(outcome: .failed(reason: reason), restore: nil)

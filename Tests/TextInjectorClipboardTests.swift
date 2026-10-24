@@ -31,7 +31,7 @@ struct TextInjectorClipboardTests {
         func makeInjector() -> TextInjector {
             TextInjector(environment: TextInjector.Environment(
                 pasteboard: pasteboard,
-                currentTarget: { InsertionTarget(bundleId: "com.example.editor") },
+                currentTarget: { TextInjectorClipboardTests.editor },
                 isAccessibilityTrusted: { true },
                 secureInputReason: { nil },
                 deliver: { [self] _ in

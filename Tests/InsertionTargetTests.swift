@@ -108,6 +108,9 @@ struct TextInjectorTargetTests {
     private final class Harness {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("sarari.tests.\(UUID().uuidString)"))
         var current: InsertionTarget
+        /// 貼る直前のセキュア入力（パスワード欄など）の理由。
+        var secureReason: String?
+        var keepResult = false
         /// ⌘V を送った回数。
         var delivered = 0
 
@@ -119,12 +122,12 @@ struct TextInjectorTargetTests {
                 pasteboard: pasteboard,
                 currentTarget: { [self] in current },
                 isAccessibilityTrusted: { true },
-                secureInputReason: { nil },
+                secureInputReason: { [self] in secureReason },
                 deliver: { [self] _ in
                     delivered += 1
                     return .succeeded
                 },
-                keepResultOnFailure: { false },
+                keepResultOnFailure: { [self] in keepResult },
                 restoreDelay: .zero
             ))
         }
@@ -144,6 +147,34 @@ struct TextInjectorTargetTests {
 
         #expect(outcome.isFailure)
         #expect(h.delivered == 0)
+    }
+
+    @Test("移った先がパスワード欄なら、結果をクリップボードにも残さない（Issue #104）")
+    func movedIntoSecureFieldDoesNotLeaveClipboard() async {
+        let stop = InsertionTarget(bundleId: "com.example.editor", window: element(1), element: element(10))
+        let h = Harness(current: InsertionTarget(bundleId: "com.example.editor", window: element(1), element: element(11)))
+        h.keepResult = true
+        h.secureReason = "パスワード欄には入力しません"
+        h.pasteboard.clearContents()
+        let injector = h.makeInjector()
+
+        let outcome = await injector.insert("口述", expectedTarget: stop)
+
+        #expect(outcome.isFailure)
+        #expect(h.delivered == 0)
+        #expect(h.pasteboard.string(forType: .string) == nil)
+    }
+
+    @Test("移っただけなら、結果はクリップボードに残す")
+    func movedKeepsClipboardWhenNotSecure() async {
+        let stop = InsertionTarget(bundleId: "com.example.editor", window: element(1), element: element(10))
+        let h = Harness(current: InsertionTarget(bundleId: "com.example.other"))
+        h.keepResult = true
+        let injector = h.makeInjector()
+
+        _ = await injector.insert("口述", expectedTarget: stop)
+
+        #expect(h.pasteboard.string(forType: .string) == "口述")
     }
 
     @Test("挿入先が変わっていなければ送る")
