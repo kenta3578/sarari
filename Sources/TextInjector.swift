@@ -218,6 +218,8 @@ final class TextInjector {
         // 自分が書いた変化を changeCount で覚える。復元の直前に比べて、その間に
         // **ユーザーが**コピーした分は踏み潰さない（Issue #63 の抑止を Issue #79 で作り直したもの）。
         let writtenChangeCount = write(text, purpose: .injection)
+        // 判定を待つ間（0.35〜0.8 秒）に終了しても戻せるよう、書いた直後から控える。
+        pendingRestore = (previous, writtenChangeCount)
 
         let outcome = await environment.deliver(text)
 
@@ -231,6 +233,7 @@ final class TextInjector {
         // `.uncertain` は「送出は済んだ・確認手段が無いだけ」なので、貼れている可能性の方が
         // 高い。結果は履歴に必ず残るので、クリップボードは戻す方が損が小さい。
         guard !outcome.isFailure || !keepResult else {
+            pendingRestore = nil
             return Attempt(outcome: outcome, restore: nil)
         }
         let restore = scheduleClipboardRestore(previous: previous, writtenChangeCount: writtenChangeCount)
@@ -301,7 +304,13 @@ final class TextInjector {
         pendingRestore = nil
         let pasteboard = environment.pasteboard
         guard pasteboard.changeCount == writtenChangeCount else { return }
-        snapshot.restore(to: pasteboard)
+        // ここに置かれているのは自分の口述文なので、元が空なら消すのが「戻す」こと。
+        // 残すと、次の挿入がそれを「元の内容」として退避して書き戻してしまう（Issue #105）。
+        if snapshot.isEmpty {
+            pasteboard.clearContents()
+        } else {
+            snapshot.restore(to: pasteboard)
+        }
     }
 }
 
@@ -322,6 +331,8 @@ extension TextInjector.Environment {
             secureInputReason: { FocusSnapshot.secureInputReason() },
             deliver: { text in await LivePaste.deliver(text) },
             keepResultOnFailure: { SettingsStore.shared.keepResultOnClipboardWhenUnsure },
+            // ⌘V から復元まで、判定の待ち（`LivePaste` の 350ms＋見直しの 450ms）に足して 250ms。
+            // 合計 0.6 秒以上あけるのは、挿入先が ⌘V を処理して読む前に戻すと、元の内容が貼られるため。
             restoreDelay: .milliseconds(250)
         )
     }
