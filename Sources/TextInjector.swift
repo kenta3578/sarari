@@ -167,6 +167,11 @@ final class TextInjector {
         return await current.value.outcome
     }
 
+    /// 予約済みの復元まで含めて、いまある挿入が全部終わるのを待つ（テストが固定の待ちを使わないため）。
+    func waitUntilIdle() async {
+        await lastInsertion?.value
+    }
+
     private func performInsert(_ text: String, expectedBundleId: String?) async -> Attempt {
         guard !text.isEmpty else { return Attempt(outcome: .succeeded, restore: nil) }
 
@@ -286,7 +291,8 @@ final class TextInjector {
         }
     }
 
-    private func restorePendingClipboard() {
+    /// 復元待ちがあれば、いまここで戻す（終了時）。
+    func restorePendingClipboard() {
         guard let pending = pendingRestore else { return }
         restoreClipboard(pending.snapshot, writtenChangeCount: pending.changeCount)
     }

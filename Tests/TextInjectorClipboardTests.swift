@@ -11,7 +11,9 @@ import Testing
 struct TextInjectorClipboardTests {
 
     /// 復元までの待ち。本物（250ms）より短くしてテストを速くする。
-    private static let restoreDelay: Duration = .milliseconds(20)
+    private static let restoreDelay: Duration = .milliseconds(50)
+    /// 挿入先が送出から遅れて読むまでの時間。復元より十分早く読む（負荷で順番が入れ替わらない幅を取る）。
+    private static let lateReadDelay: Duration = .milliseconds(10)
 
     private final class Harness {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("sarari.tests.\(UUID().uuidString)"))
@@ -33,7 +35,7 @@ struct TextInjectorClipboardTests {
                 deliver: { [self] _ in
                     pasted.append(pasteboard.string(forType: .string))
                     Task { @MainActor [self] in
-                        try? await Task.sleep(for: TextInjectorClipboardTests.restoreDelay / 2)
+                        try? await Task.sleep(for: TextInjectorClipboardTests.lateReadDelay)
                         lateReads.append(pasteboard.string(forType: .string))
                     }
                     duringDeliver?()
@@ -56,9 +58,9 @@ struct TextInjectorClipboardTests {
         deinit { pasteboard.releaseGlobally() }
     }
 
-    /// 遅らせて走る復元が全部終わるまで待つ。
-    private func waitForRestores() async {
-        try? await Task.sleep(for: Self.restoreDelay * 8)
+    /// 遅らせて走る復元が全部終わるまで待つ（固定の待ちにしない）。
+    private func waitForRestores(_ injector: TextInjector) async {
+        await injector.waitUntilIdle()
     }
 
     @Test("2回続けて挿入しても、1回目の前にコピーしていた内容に戻る")
@@ -69,7 +71,7 @@ struct TextInjectorClipboardTests {
 
         _ = await injector.insert("1回目", expectedBundleId: "com.example.editor")
         _ = await injector.insert("2回目", expectedBundleId: "com.example.editor")
-        await waitForRestores()
+        await waitForRestores(injector)
 
         #expect(h.current == "元のコピー")
         // 貼った内容が入れ替わっていないこと。
@@ -87,7 +89,7 @@ struct TextInjectorClipboardTests {
         _ = await injector.insert("口述", expectedBundleId: "com.example.editor")
         _ = await injector.insert("もう一度挿入")
         _ = await injector.insert("次の口述", expectedBundleId: "com.example.editor")
-        await waitForRestores()
+        await waitForRestores(injector)
 
         #expect(h.current == "元のコピー")
         #expect(h.pasted == ["口述", "もう一度挿入", "次の口述"])
@@ -103,7 +105,7 @@ struct TextInjectorClipboardTests {
         async let first = injector.insert("1回目", expectedBundleId: "com.example.editor")
         async let second = injector.insert("2回目", expectedBundleId: "com.example.editor")
         _ = await (first, second)
-        await waitForRestores()
+        await waitForRestores(injector)
 
         #expect(h.current == "元のコピー")
         // どちらが先に並ぶかは決めない。重複せず1回ずつ貼られていること。
@@ -123,8 +125,40 @@ struct TextInjectorClipboardTests {
 
         _ = await injector.insert("1回目", expectedBundleId: "com.example.editor")
         _ = await injector.insert("2回目", expectedBundleId: "com.example.editor")
-        await waitForRestores()
+        await waitForRestores(injector)
 
         #expect(h.current == "あとからのコピー")
+    }
+
+    @Test("口述の前にクリップボードが空なら、続けて挿入したあとも口述文を残さない")
+    func emptyOriginalLeavesNoDictation() async {
+        let h = Harness()
+        let injector = h.makeInjector()
+        h.pasteboard.clearContents()
+
+        _ = await injector.insert("1回目", expectedBundleId: "com.example.editor")
+        _ = await injector.insert("2回目", expectedBundleId: "com.example.editor")
+        await waitForRestores(injector)
+
+        #expect(h.current == nil)
+        #expect(h.pasted == ["1回目", "2回目"])
+    }
+
+    @Test("判定を待っている間にアプリが終わっても、元のコピーに戻す")
+    func terminateDuringDeliverRestoresOriginal() async {
+        let h = Harness()
+        let injector = h.makeInjector()
+        h.copy("元のコピー")
+        h.duringDeliver = { [h, injector] in
+            // ⌘V を送ったあと、判定が出る前に終了した（applicationWillTerminate）。
+            h.duringDeliver = nil
+            injector.restorePendingClipboard()
+            #expect(h.current == "元のコピー")
+        }
+
+        _ = await injector.insert("口述", expectedBundleId: "com.example.editor")
+        await waitForRestores(injector)
+
+        #expect(h.current == "元のコピー")
     }
 }
