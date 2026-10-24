@@ -11,6 +11,8 @@ export default defineConfig({
   base: '/sarari/',
   cleanUrls: true,
   lastUpdated: true,
+  // アプリアイコンと同じ絵（scripts/make-icon.sh が docs/public/ に置く）。head の href には base が付かない
+  head: [['link', { rel: 'icon', type: 'image/svg+xml', href: '/sarari/logo.svg' }]],
   // サイトは使う人向けの説明書だけにする。docs/README.md（フォルダの目次）と、
   // コードを読む人向けの文書は GitHub 上で読んでもらう
   srcExclude: [
@@ -39,6 +41,7 @@ export default defineConfig({
     },
   },
   themeConfig: {
+    logo: '/logo.svg',
     nav: [
       { text: '説明書', link: '/manual' },
       { text: '更新履歴', link: '/changelog' },
