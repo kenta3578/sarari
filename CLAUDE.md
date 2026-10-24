@@ -92,7 +92,7 @@ xcodebuild -project sarari.xcodeproj -scheme sarari -configuration Debug \
   2>&1 | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)"  # 型チェック（署名なし）。**警告も 0 を保つ**
 xcodebuild test -project sarari.xcodeproj -scheme sarari \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO \
-  2>&1 | grep -E "✘|Test run|TEST (SUCCEEDED|FAILED)"     # 単体テスト（0.1秒未満。守備範囲は Tests/README.md）
+  2>&1 | grep -E "✘|Test run|TEST (SUCCEEDED|FAILED)"     # 単体テスト（1秒未満。守備範囲は Tests/README.md）
 ./scripts/install-local.sh                          # 実機へインストールして起動（マージ後に必ず）
 ./scripts/build-release.sh vX.Y.Z                   # 配布用のアドホック署名 zip を build/release/ に作る（CI と同じ物）
 pnpm install && pnpm docs:dev                       # 説明書サイトを手元で見る（docs/ を VitePress で出す。pnpm docs:build でリンク切れ検査）
