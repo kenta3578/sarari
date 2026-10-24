@@ -44,6 +44,9 @@ struct InsertionTargetTests {
         let start = target(Self.editor, window: 1, element: 10)
         #expect(InsertionTarget.mismatchReason(expected: start, current: target(Self.editor)) == nil)
         #expect(InsertionTarget.mismatchReason(expected: start, current: target(Self.editor, window: 1)) == nil)
+        // 逆向き: 開始時に入力欄だけ読めなかった。
+        #expect(InsertionTarget.mismatchReason(expected: target(Self.editor, window: 1),
+                                               current: target(Self.editor, window: 1, element: 10)) == nil)
     }
 
     // MARK: - 挿入しない
@@ -52,7 +55,10 @@ struct InsertionTargetTests {
     func otherAppIsRejected() {
         let start = target(Self.editor, window: 1, element: 10)
         let now = target(Self.other, window: 2, element: 20)
-        #expect(InsertionTarget.mismatchReason(expected: start, current: now) != nil)
+        #expect(InsertionTarget.mismatchReason(expected: start, current: now) == InsertionTarget.appChangedReason)
+        // 窓も入力欄も読めないアプリどうしでも、アプリが違えば止める。
+        #expect(InsertionTarget.mismatchReason(expected: target(Self.editor), current: target(Self.other))
+                == InsertionTarget.appChangedReason)
     }
 
     @Test("同じアプリの別の窓に移ったら挿入しない")
@@ -68,6 +74,9 @@ struct InsertionTargetTests {
         let start = target(Self.editor, window: 1, element: 10)
         let now = target(Self.editor, window: 1, element: 11)
         #expect(InsertionTarget.mismatchReason(expected: start, current: now) != nil)
+        // 開始時に窓だけ読めなくても、入力欄が違えば止める。
+        #expect(InsertionTarget.mismatchReason(expected: target(Self.editor, element: 10),
+                                               current: target(Self.editor, window: 1, element: 11)) != nil)
     }
 
     @Test("録音を始めたとき sarari 自身が前面だったら、照合を飛ばさずに挿入しない")
