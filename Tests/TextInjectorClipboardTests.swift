@@ -17,6 +17,9 @@ struct TextInjectorClipboardTests {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("sarari.tests.\(UUID().uuidString)"))
         /// 挿入先が ⌘V で受け取った内容（送出の順）。
         var pasted: [String?] = []
+        /// 挿入先が送出から遅れて読んだ内容。本物のアプリは ⌘V を処理してから読むので、
+        /// 復元を早めすぎるとここに古い内容が入る。
+        var lateReads: [String?] = []
         /// 送出のたびに呼ぶ。挿入先の処理中にユーザーが何かする場面を作る。
         var duringDeliver: (@MainActor () -> Void)?
 
@@ -29,6 +32,10 @@ struct TextInjectorClipboardTests {
                 secureInputReason: { nil },
                 deliver: { [self] _ in
                     pasted.append(pasteboard.string(forType: .string))
+                    Task { @MainActor [self] in
+                        try? await Task.sleep(for: TextInjectorClipboardTests.restoreDelay / 2)
+                        lateReads.append(pasteboard.string(forType: .string))
+                    }
                     duringDeliver?()
                     // 本物は 350ms 以上待って判定する。ここでも中断点を挟む。
                     await Task.yield()
@@ -67,6 +74,8 @@ struct TextInjectorClipboardTests {
         #expect(h.current == "元のコピー")
         // 貼った内容が入れ替わっていないこと。
         #expect(h.pasted == ["1回目", "2回目"])
+        // 挿入先が遅れて読んでも、まだ自分の口述文が置いてあること（復元を早めすぎない）。
+        #expect(h.lateReads == ["1回目", "2回目"])
     }
 
     @Test("3回続けても、HUD・履歴からの再挿入（照合なし）を混ぜても元に戻る")
@@ -82,6 +91,7 @@ struct TextInjectorClipboardTests {
 
         #expect(h.current == "元のコピー")
         #expect(h.pasted == ["口述", "もう一度挿入", "次の口述"])
+        #expect(h.lateReads == ["口述", "もう一度挿入", "次の口述"])
     }
 
     @Test("呼び出し側が待たずに続けて投げても、元に戻る")
@@ -96,7 +106,8 @@ struct TextInjectorClipboardTests {
         await waitForRestores()
 
         #expect(h.current == "元のコピー")
-        #expect(Set(h.pasted.compactMap { $0 }) == ["1回目", "2回目"])
+        // どちらが先に並ぶかは決めない。重複せず1回ずつ貼られていること。
+        #expect(h.pasted.compactMap { $0 }.sorted() == ["1回目", "2回目"])
     }
 
     @Test("挿入の途中でユーザーがコピーした内容は、戻すときに踏み潰さない")
