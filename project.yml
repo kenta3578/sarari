@@ -52,11 +52,13 @@ targets:
         # 型で競合を防げているかをコンパイラに確かめさせる唯一の手段。
         SWIFT_STRICT_CONCURRENCY: complete
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        # ローカル実行前提: sandbox OFF（Accessibility / CGEvent / グローバル監視のため必須）
-        # ⚠️ 他者へ配布する段階では ENABLE_HARDENED_RUNTIME: YES + entitlements 最小化
-        #    + Developer ID 署名 + Notarization に切り替えること。手順は RELEASING.md
+        # sandbox OFF（Accessibility / CGEvent / グローバル監視のため必須）
         ENABLE_APP_SANDBOX: NO
-        ENABLE_HARDENED_RUNTIME: NO
+        # Hardened Runtime は配布版もローカル版も有効（Issue #103）。アクセシビリティとマイクの
+        # 許可を持つアプリなので、他のプログラムに入り込まれないようにする。
+        # scripts/ の codesign でも同じ entitlements と --options runtime を渡している。
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_ENTITLEMENTS: Sources/sarari.entitlements
         # 署名は Xcode で開いた時に各自の Personal Team を割り当てる
         CODE_SIGN_STYLE: Automatic
 

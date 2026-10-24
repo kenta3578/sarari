@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Hardened Runtime の下でマイクを使うのに要る唯一の entitlement（Issue #103）。
+	     イベントタップ・挿入はアクセシビリティの許可で動き、entitlement は要らない。
+	     足すときは1つずつ理由をここに書く。 -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>

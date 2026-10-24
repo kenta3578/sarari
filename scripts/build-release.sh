@@ -31,7 +31,8 @@ APP="$DERIVED/Build/Products/Release/sarari.app"
 echo "==> アドホック署名"
 # Apple Silicon は未署名のバイナリを起動しない。--deep は署名に使わない（Apple 非推奨）。
 # 埋め込みのフレームワークを持つようになったら、内側から先に個別に署名する。
-codesign --force --sign - "$APP"
+# Hardened Runtime を有効にし、entitlements はマイクだけ（Issue #103。理由はファイル内のコメント）。
+codesign --force --options runtime --entitlements Sources/sarari.entitlements --sign - "$APP"
 codesign --verify --deep --strict "$APP"
 
 echo "==> zip を作る"

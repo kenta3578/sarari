@@ -154,7 +154,7 @@ security set-key-partition-list -S apple-tool:,apple:,codesign: -s ~/Library/Key
 - **唯一の通信**: WhisperKit に切り替えたときの初回モデル DL（Hugging Face から CoreML モデルを
   `~/Library/Application Support/com.kenta3578.koebun/huggingface/models/argmaxinc/whisperkit-coreml/openai_whisper-large-v3-v20240930_turbo_632MB` へ取得、約 630MB）。2 回目以降はオフラインで動く。**既定（Apple 音声認識）では通信しない**
 - **サンドボックス OFF**: Accessibility / CGEvent / グローバル監視のため。この判断は `project.yml` にコメントで残している
-- **配布する場合**: `ENABLE_HARDENED_RUNTIME` を `YES` に戻し、Developer ID 署名 + Notarization が必要。手順は [RELEASING.md](RELEASING.md)
+- **Hardened Runtime**: ローカル版・配布版とも有効（`--options runtime`）。entitlements はマイクだけ（`Sources/sarari.entitlements`）。Developer ID 署名 + Notarization の手順は [RELEASING.md](RELEASING.md)
 
 ## 既知の調整ポイント
 
