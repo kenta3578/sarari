@@ -85,8 +85,8 @@ final class TextInjector {
     /// 挿入が触る外の世界。
     struct Environment {
         var pasteboard: NSPasteboard
-        /// 最前面アプリのバンドル ID（自分自身は nil）。
-        var frontmostBundleId: @MainActor () -> String?
+        /// いまの挿入先（前面アプリ・前面の窓・フォーカスのある要素）。
+        var currentTarget: @MainActor () -> InsertionTarget
         var isAccessibilityTrusted: @MainActor () -> Bool
         /// 挿入してはいけない状態ならその理由（パスワード欄・Secure Keyboard Entry）。
         var secureInputReason: @MainActor () -> String?
@@ -106,19 +106,16 @@ final class TextInjector {
 
     // MARK: - 入口（static）
 
-    /// - Parameter expectedBundleId: 録音を始めたときに前面だったアプリ。渡すと、挿入直前に
-    ///   前面が変わっていないかを照合する。nil なら照合しない（HUD・履歴からの再挿入）。
-    static func insert(_ text: String, expectedBundleId: String? = nil) async -> InsertionOutcome {
-        await shared.insert(text, expectedBundleId: expectedBundleId)
+    /// - Parameter expectedTarget: 録音を始めたときの挿入先。渡すと、挿入直前に
+    ///   変わっていないかを照合する。nil なら照合しない（HUD・履歴からの再挿入）。
+    static func insert(_ text: String, expectedTarget: InsertionTarget? = nil) async -> InsertionOutcome {
+        await shared.insert(text, expectedTarget: expectedTarget)
     }
 
-    /// 最前面アプリのバンドル ID。**自分自身は除く**（HUD は `.nonactivatingPanel` なので
-    /// 通常は前面に出ないが、設定ウィンドウを開いていると自分が前面になりうる）。
-    ///
-    /// 録音開始時にこれを控え、挿入直前に同じ値かを見る（Issue #80）。**取る側と比べる側を
-    /// 同じ場所に置く**ことで、片方だけ条件が変わる事故を防ぐ。
-    static func frontmostBundleId() -> String? {
-        shared.environment.frontmostBundleId()
+    /// いまの挿入先。録音開始時にこれを控え、挿入直前に同じかを見る（Issue #80 / #107）。
+    /// **取る側と比べる側を同じ場所に置く**ことで、片方だけ条件が変わる事故を防ぐ。
+    static func currentTarget() -> InsertionTarget {
+        shared.environment.currentTarget()
     }
 
     /// 口述テキストをクリップボードへ置く。**HUD と履歴の「コピー」はここを通す。**
@@ -157,11 +154,11 @@ final class TextInjector {
         let restore: Task<Void, Never>?
     }
 
-    func insert(_ text: String, expectedBundleId: String? = nil) async -> InsertionOutcome {
+    func insert(_ text: String, expectedTarget: InsertionTarget? = nil) async -> InsertionOutcome {
         let previous = lastInsertion
         let current = Task { @MainActor in
             await previous?.value
-            return await performInsert(text, expectedBundleId: expectedBundleId)
+            return await performInsert(text, expectedTarget: expectedTarget)
         }
         lastInsertion = Task { await current.value.restore?.value }
         return await current.value.outcome
@@ -172,7 +169,7 @@ final class TextInjector {
         await lastInsertion?.value
     }
 
-    private func performInsert(_ text: String, expectedBundleId: String?) async -> Attempt {
+    private func performInsert(_ text: String, expectedTarget: InsertionTarget?) async -> Attempt {
         guard !text.isEmpty else { return Attempt(outcome: .succeeded, restore: nil) }
 
         let keepResult = environment.keepResultOnFailure()
@@ -182,13 +179,13 @@ final class TextInjector {
         // 文字起こしと整形に数秒かかる間にアプリを切り替えると、⌘V はその時点の前面へ飛ぶ。
         // しかも before / after は両方その新しい要素なので `CFEqual` が一致し、文字数も
         // 増えるので **「成功」と判定されて誤爆が検知されなかった**。
-        if let expectedBundleId,
-           let current = environment.frontmostBundleId(),
-           current != expectedBundleId {
+        if let expectedTarget,
+           let reason = InsertionTarget.mismatchReason(expected: expectedTarget,
+                                                       current: environment.currentTarget()) {
             if keepResult {
                 write(text, purpose: .injection)
             }
-            return Attempt(outcome: .failed(reason: "録音したアプリが前面にないため挿入しませんでした"), restore: nil)
+            return Attempt(outcome: .failed(reason: reason), restore: nil)
         }
 
         guard environment.isAccessibilityTrusted() else {
@@ -321,11 +318,13 @@ extension TextInjector.Environment {
     static var live: TextInjector.Environment {
         TextInjector.Environment(
             pasteboard: .general,
-            frontmostBundleId: {
+            currentTarget: {
+                // 自分自身は除く（HUD は `.nonactivatingPanel` なので通常は前面に出ないが、
+                // 設定ウィンドウを開いていると自分が前面になりうる）。
                 guard let app = NSWorkspace.shared.frontmostApplication,
                       app.bundleIdentifier != Bundle.main.bundleIdentifier
-                else { return nil }
-                return app.bundleIdentifier
+                else { return InsertionTarget(bundleId: nil) }
+                return InsertionTarget(bundleId: app.bundleIdentifier)
             },
             isAccessibilityTrusted: { AXIsProcessTrusted() },
             secureInputReason: { FocusSnapshot.secureInputReason() },
