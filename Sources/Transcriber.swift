@@ -1,4 +1,5 @@
 import Foundation
+import Hub
 import os
 @preconcurrency import WhisperKit
 
@@ -84,10 +85,15 @@ actor Transcriber: SpeechEngine {
     }
 
     /// 配布元から取得する（通信はここだけ）。既にあるファイルは取得ライブラリが飛ばす。
+    ///
+    /// どちらも**ファイルを置くだけで中身は解析しない**。解析は照合のあと（`localLoadConfig`）。
+    /// トークナイザに WhisperKit の `ModelUtilities.loadTokenizer` を使わないのはそのため
+    /// （取得したその場で解析する）。置き場は WhisperKit が読み込み時に探す場所と同じ。
     private static func fetch(base: URL) async throws {
         _ = try await WhisperKit.download(variant: model, downloadBase: base)
-        // トークナイザは WhisperKit が読み込み時に取るのと同じ関数で、同じ場所へ取る。
-        _ = try await ModelUtilities.loadTokenizer(for: .largev3, tokenizerFolder: base)
+        _ = try await HubApi(downloadBase: base).snapshot(
+            from: HubApi.Repo(id: tokenizerRepo),
+            matching: ModelIntegrity.whisperLargeV3Tokenizer.map(\.path))
     }
 
     private static func verify(_ targets: [VerificationTarget]) throws {

@@ -12,6 +12,11 @@ packages:
     # sarari.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved で固定される。
     # 依存を上げるときは -resolvePackageDependencies し直して同ファイルをコミットすること。
     from: "0.9.0"
+  # WhisperKit が使っている取得ライブラリ（同梱済み）。トークナイザを**解析せずに**取得するために
+  # 直接使う（Issue #106。読み込みは照合のあと）。版の幅は WhisperKit の指定（upToNextMinor）に合わせる。
+  swift-transformers:
+    url: https://github.com/huggingface/swift-transformers.git
+    minorVersion: "1.1.6"
 
 targets:
   sarari:
@@ -31,6 +36,8 @@ targets:
       - path: Resources/Assets.xcassets
     dependencies:
       - package: WhisperKit
+      - package: swift-transformers
+        product: Hub
     settings:
       base:
         PRODUCT_NAME: sarari
