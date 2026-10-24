@@ -12,7 +12,7 @@ struct TextInjectorClipboardTests {
 
     /// 復元までの待ち。本物（250ms）より短くしてテストを速くする。
     private static let restoreDelay: Duration = .milliseconds(50)
-    /// 録音を始めたときの挿入先。フェイクの環境はいつもこれを返すので、照合は通る。
+    /// 録音を止めたときの挿入先。フェイクの環境はいつもこれを返すので、照合は通る。
     private static let editor = InsertionTarget(bundleId: "com.example.editor")
     /// 挿入先が送出から遅れて読むまでの時間。復元より十分早く読む（負荷で順番が入れ替わらない幅を取る）。
     private static let lateReadDelay: Duration = .milliseconds(10)

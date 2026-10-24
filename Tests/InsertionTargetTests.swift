@@ -14,6 +14,8 @@ struct InsertionTargetTests {
 
     private static let editor = "com.example.editor"
     private static let other = "com.example.other"
+    /// sarari 自身。止めた時点が基準なので、sarari の窓で止めたら sarari の入力欄が挿入先になる。
+    private static let sarari = "com.kenta3578.koebun"
 
     /// 識別用の AX 要素。番号が同じなら同じ要素。
     private func element(_ id: Int32) -> AXUIElement {
@@ -26,73 +28,76 @@ struct InsertionTargetTests {
                         element: id.map(element))
     }
 
+    private func reason(_ stop: InsertionTarget, _ now: InsertionTarget) -> String? {
+        InsertionTarget.mismatchReason(expected: stop, current: now)
+    }
+
     // MARK: - 挿入してよい
 
     @Test("同じアプリ・同じ窓・同じ入力欄なら挿入する")
     func sameTargetIsAllowed() {
-        let start = target(Self.editor, window: 1, element: 10)
-        let now = target(Self.editor, window: 1, element: 10)
-        #expect(InsertionTarget.mismatchReason(expected: start, current: now) == nil)
+        #expect(reason(target(Self.editor, window: 1, element: 10), target(Self.editor, window: 1, element: 10)) == nil)
     }
 
-    @Test("止めたときに窓も入力欄も読めなかったアプリは、アプリが同じなら挿入する")
-    func unreadableAtStartFallsBackToApp() {
-        let start = target(Self.editor)
-        let now = target(Self.editor, window: 1, element: 10)
-        #expect(InsertionTarget.mismatchReason(expected: start, current: now) == nil)
+    @Test("止めたときに読めなかった窓・入力欄は比べない（アプリが同じなら挿入する）")
+    func unreadableAtStopFallsBackToApp() {
+        #expect(reason(target(Self.editor), target(Self.editor, window: 1, element: 10)) == nil)
+        // 止めたときに入力欄だけ読めなかった。
+        #expect(reason(target(Self.editor, window: 1), target(Self.editor, window: 1, element: 10)) == nil)
     }
 
-    @Test("挿入の直前に読めなかった側は比べない（読めないだけで止めない）")
-    func unreadableNowIsNotAMismatch() {
-        let start = target(Self.editor, window: 1, element: 10)
-        #expect(InsertionTarget.mismatchReason(expected: start, current: target(Self.editor)) == nil)
-        #expect(InsertionTarget.mismatchReason(expected: start, current: target(Self.editor, window: 1)) == nil)
-        // 逆向き: 止めたときに入力欄だけ読めなかった。
-        #expect(InsertionTarget.mismatchReason(expected: target(Self.editor, window: 1),
-                                               current: target(Self.editor, window: 1, element: 10)) == nil)
+    @Test("止めたときに前面のアプリが分からなければ照合しない（以前と同じ）")
+    func unknownAppAtStopIsNotChecked() {
+        #expect(reason(target(nil), target(Self.editor, window: 1, element: 10)) == nil)
+    }
+
+    @Test("sarari の窓で止めたら、sarari の同じ入力欄には挿入する（設定画面への口述）")
+    func stoppedOnSarariInsertsIntoSarari() {
+        #expect(reason(target(Self.sarari, window: 1, element: 10), target(Self.sarari, window: 1, element: 10)) == nil)
     }
 
     // MARK: - 挿入しない
 
     @Test("別のアプリに移ったら挿入しない")
     func otherAppIsRejected() {
-        let start = target(Self.editor, window: 1, element: 10)
-        let now = target(Self.other, window: 2, element: 20)
-        #expect(InsertionTarget.mismatchReason(expected: start, current: now) == InsertionTarget.appChangedReason)
+        #expect(reason(target(Self.editor, window: 1, element: 10), target(Self.other, window: 2, element: 20))
+                == InsertionTarget.appChangedReason)
         // 窓も入力欄も読めないアプリどうしでも、アプリが違えば止める。
-        #expect(InsertionTarget.mismatchReason(expected: target(Self.editor), current: target(Self.other))
+        #expect(reason(target(Self.editor), target(Self.other)) == InsertionTarget.appChangedReason)
+        // 貼る直前に前面のアプリが分からなくなっていても止める。
+        #expect(reason(target(Self.editor), target(nil)) == InsertionTarget.appChangedReason)
+    }
+
+    @Test("sarari と他のアプリの間で移ったら挿入しない")
+    func movingBetweenSarariAndOthersIsRejected() {
+        #expect(reason(target(Self.editor, window: 1, element: 10), target(Self.sarari, window: 2, element: 20))
+                == InsertionTarget.appChangedReason)
+        #expect(reason(target(Self.sarari, window: 2, element: 20), target(Self.editor, window: 1, element: 10))
                 == InsertionTarget.appChangedReason)
     }
 
     @Test("同じアプリの別の窓に移ったら挿入しない")
     func otherWindowIsRejected() {
-        let start = target(Self.editor, window: 1, element: 10)
-        // 入力欄が読めないアプリでも、窓が違えば止める。
-        #expect(InsertionTarget.mismatchReason(expected: start, current: target(Self.editor, window: 2, element: 20)) != nil)
-        #expect(InsertionTarget.mismatchReason(expected: start, current: target(Self.editor, window: 2)) != nil)
+        let stop = target(Self.editor, window: 1, element: 10)
+        #expect(reason(stop, target(Self.editor, window: 2, element: 20)) == InsertionTarget.focusChangedReason)
+        #expect(reason(target(Self.editor, window: 1), target(Self.editor, window: 2)) == InsertionTarget.focusChangedReason)
     }
 
     @Test("同じ窓の別のタブ（別の入力欄）に移ったら挿入しない")
     func otherTabIsRejected() {
-        let start = target(Self.editor, window: 1, element: 10)
-        let now = target(Self.editor, window: 1, element: 11)
-        #expect(InsertionTarget.mismatchReason(expected: start, current: now) != nil)
+        #expect(reason(target(Self.editor, window: 1, element: 10), target(Self.editor, window: 1, element: 11))
+                == InsertionTarget.focusChangedReason)
         // 止めたときに窓だけ読めなくても、入力欄が違えば止める。
-        #expect(InsertionTarget.mismatchReason(expected: target(Self.editor, element: 10),
-                                               current: target(Self.editor, window: 1, element: 11)) != nil)
+        #expect(reason(target(Self.editor, element: 10), target(Self.editor, window: 1, element: 11))
+                == InsertionTarget.focusChangedReason)
     }
 
-    @Test("録音を止めたとき sarari 自身が前面だったら、照合を飛ばさずに挿入しない")
-    func stoppedOnSarariIsRejected() {
-        let start = target(nil)
-        #expect(InsertionTarget.mismatchReason(expected: start, current: target(Self.editor, window: 1, element: 10)) != nil)
-        #expect(InsertionTarget.mismatchReason(expected: start, current: target(nil)) != nil)
-    }
-
-    @Test("挿入の直前に sarari 自身が前面になっていたら挿入しない")
-    func sarariInFrontNowIsRejected() {
-        let start = target(Self.editor, window: 1, element: 10)
-        #expect(InsertionTarget.mismatchReason(expected: start, current: target(nil)) != nil)
+    @Test("止めたときに読めた窓・入力欄が、貼る直前に読めなくなっていたら挿入しない")
+    func unreadableNowIsRejected() {
+        let stop = target(Self.editor, window: 1, element: 10)
+        // 入力欄以外（サイドバーなど）へ移った・応答しなくなった。移っていないと確かめられないので送らない。
+        #expect(reason(stop, target(Self.editor, window: 1)) == InsertionTarget.focusChangedReason)
+        #expect(reason(stop, target(Self.editor)) == InsertionTarget.focusChangedReason)
     }
 }
 
@@ -131,11 +136,11 @@ struct TextInjectorTargetTests {
 
     @Test("止めたあと文字起こし中に同じアプリの別のタブへ移ったら、送らずに失敗を返す")
     func switchedTabIsNotDelivered() async {
-        let start = InsertionTarget(bundleId: "com.example.editor", window: element(1), element: element(10))
+        let stop = InsertionTarget(bundleId: "com.example.editor", window: element(1), element: element(10))
         let h = Harness(current: InsertionTarget(bundleId: "com.example.editor", window: element(1), element: element(11)))
         let injector = h.makeInjector()
 
-        let outcome = await injector.insert("口述", expectedTarget: start)
+        let outcome = await injector.insert("口述", expectedTarget: stop)
 
         #expect(outcome.isFailure)
         #expect(h.delivered == 0)
@@ -143,11 +148,11 @@ struct TextInjectorTargetTests {
 
     @Test("挿入先が変わっていなければ送る")
     func sameTargetIsDelivered() async {
-        let start = InsertionTarget(bundleId: "com.example.editor", window: element(1), element: element(10))
+        let stop = InsertionTarget(bundleId: "com.example.editor", window: element(1), element: element(10))
         let h = Harness(current: InsertionTarget(bundleId: "com.example.editor", window: element(1), element: element(10)))
         let injector = h.makeInjector()
 
-        let outcome = await injector.insert("口述", expectedTarget: start)
+        let outcome = await injector.insert("口述", expectedTarget: stop)
 
         #expect(outcome == .succeeded)
         #expect(h.delivered == 1)
