@@ -18,7 +18,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 
 右⌥ 押下（1 回目）
   HotKeyManager                   CGEventTap で修飾キーだけを見て onToggle を呼ぶ
-  AppController.startRecording()  世代番号を進める / 前面アプリの bundle ID を控える
+  AppController.startRecording()  世代番号を進める / 録音を始めたあと挿入先（アプリ・窓・入力欄）を控える
   AudioRecorder.start()           AVAudioEngine の installTap。16kHz・mono・Float32 に変換して溜める
   RecordingHUDController.show()   HUD を出す（NSPanel）
   SoundPlayer.play(start)         開始音。鳴っている間ぶんは HUD のレベルを無視する
@@ -35,7 +35,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
     └ FillerRemover.apply()            フィラー除去（設定 OFF なら丸ごと飛ばす）
 
   await previousPipeline          前の発話の挿入が終わるまで待つ（貼る順を発話順に揃える）
-  TextInjector.insert()           前面アプリ照合 → 権限確認 → セキュア入力確認
+  TextInjector.insert()           挿入先の照合（アプリ・窓・入力欄）→ 権限確認 → セキュア入力確認
                                   → ⌘V 合成（既定）か 1 文字ずつ送出 → **成否判定** → 復元判断
   InsertionPresentation.make()    結果を「メニューバーの状態」と「HUD の動き」に 1 回だけ翻訳
   PipelineGuard.finish()          自分が追い越されていないかを判定（後述）
@@ -93,6 +93,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 | ファイル | 行 | 役割 |
 |---|---:|---|
 | `TextInjector.swift` | 545 | **挿入の本体**。前面照合・セキュア入力回避・⌘V 合成・成否判定・クリップボード復元 |
+| `InsertionTarget.swift` | 47 | 挿入先（前面アプリ・窓・入力欄）と、録音開始時から変わったかの判定。AppKit なしの純関数 |
 | `Pasteboard.swift` | 69 | クリップボードの「機密・一時」目印（nspasteboard.org の慣習）と全 type のスナップショット |
 | `InsertionPresentation.swift` | 63 | 挿入結果 → メニューバー状態 ＋ HUD の動き。**1 か所で導出**して二重分岐を防ぐ |
 
