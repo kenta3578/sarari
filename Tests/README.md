@@ -34,6 +34,7 @@ AppKit の実画面・モデル・TCC に依存しない **純 Swift のロジ�
 | `DataDirectoryTests` | 旧名の置き場 `~/koemakase`・`~/koebun` からの移行。新しい置き場があれば触らない。旧名が2つあれば新しい名前の方を移す |
 | `PasteboardTests` | 全 type の退避と復元（名前付きペーストボードで隔離） |
 | `PasteboardMarkerTests` | クリップボードに立てる目印。挿入用（4 つ）とユーザーのコピー（Concealed のみ）の違い |
+| `TextInjectorGuardTests` | 挿入先を照合しなくても、パスワード欄・Secure Keyboard Entry・権限なしでは ⌘V を送らない。パスワード欄ではクリップボードにも残さない（Issue #104 / #116） |
 | `TextInjectorClipboardTests` | 続けて挿入しても、借りたクリップボードが1回目の前の内容に戻る（元が空なら空に、判定待ちの間に終了しても）。復元が送出より先に走らない順序。途中でユーザーがコピーした分は踏み潰さない。本物の待ち時間（250ms）が足りるかは見ていない（Issue #105。名前付きペーストボードとフェイクの送出で） |
 | `HotKeyJudgeTests` | 修飾キーの左右区別・合成イベント・複数修飾キーの正規化 |
 | `LevelBarsTests` | 最小表示の棒（7 本）。黙ると点、声で高くなり、文字起こし中は波形の形で止まる。音節の切れ目で潰れない |

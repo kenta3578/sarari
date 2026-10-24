@@ -17,12 +17,6 @@ final class AppController {
     private let mediaPauser = MediaPauser()
     private let state = AppState.shared
 
-    /// 録音を始めた時点の最前面アプリ。挿入直前の照合に使う（Issue #80）。
-    ///
-    /// **挿入先は録音開始時に確定させる**。停止時に取り直すと、喋っている間に
-    /// アプリを切り替えただけで別のアプリへ貼ってしまう。
-    private var pendingBundleId: String?
-
     /// アクセシビリティ権限が付くのを見張るタイマー（Issue #78）。許可を検知したら止める。
     private var accessibilityTimer: Timer?
 
@@ -197,8 +191,6 @@ final class AppController {
         guard state.status.canStartRecording else { return }
         let generation = guardState.begin()
         do {
-            // 挿入先は録音開始の**前**に控える。NSWorkspace だけなので AX 権限も要らず軽い。
-            pendingBundleId = TextInjector.frontmostBundleId()
             // 開始音より前に止める（音楽が入らないうちに録音を始めるため）。
             mediaPauser.pauseIfPlaying()
 
@@ -226,7 +218,6 @@ final class AppController {
         state.update(.processing)
 
         let generation = guardState.generation
-        let expectedBundleId = takePendingBundleId()
         SoundPlayer.play(SettingsStore.shared.stopSound)
         let samples = recorder.stop()
         mediaPauser.resumeIfPaused()
@@ -250,7 +241,6 @@ final class AppController {
                 Log.signposter.endInterval("dictation", signpost)
             }
             await runPipeline(samples: samples,
-                              expectedBundleId: expectedBundleId,
                               deviceChanged: deviceChanged,
                               limitReached: limitReached,
                               generation: generation,
@@ -263,7 +253,6 @@ final class AppController {
     /// 文字起こしと後処理そのものは `DictationPipeline` に閉じている。ここに残すのは
     /// 「挿入する・見せる・残す」という副作用の側だけ。
     private func runPipeline(samples: [Float],
-                             expectedBundleId: String?,
                              deviceChanged: Bool,
                              limitReached: Bool,
                              generation: Int,
@@ -299,7 +288,6 @@ final class AppController {
         // 前の発話のパイプラインが終わるまで待つ。貼る順番を発話順に揃える（Issue #99）。
         await previousPipeline?.value
         // 挿入は成否を判定して返る。成功と確認できなければ結果を捨てない（Issue #13）。
-        // 録音を始めたアプリと違うところへ貼らないよう、照合用に渡す（Issue #80）。
         // 上限で止めた録音は止め忘れの可能性が高いので、カーソルへは入れない（Issue #17）。
         let outcome: InsertionOutcome
         if text.isEmpty {
@@ -307,7 +295,7 @@ final class AppController {
         } else if limitReached {
             outcome = RecordingLimit.outcome
         } else {
-            outcome = await TextInjector.insert(text, expectedBundleId: expectedBundleId)
+            outcome = await TextInjector.insert(text)
         }
         let resultLocation = SettingsStore.shared.resultLocationDescription(isFailure:)
         // 見せ方（メニューバーの状態と HUD の動き）は 1 か所で導出する（Issue #64）。
@@ -363,12 +351,6 @@ final class AppController {
         }
     }
 
-    /// 録音開始時に控えた挿入先を取り出す。nil なら照合しない（開始時に取れなかった場合）。
-    private func takePendingBundleId() -> String? {
-        defer { pendingBundleId = nil }
-        return pendingBundleId
-    }
-
     /// 追い越されたパイプラインが見せ損ねた結果を出す（Issue #100）。
     /// 結果があれば結果パネルで残す。無ければ状態表示（失敗の原因）を HUD に前面で出す。
     /// HUD が閉じていても出す。閉じたまま状態だけ変えるとメニューバーの色しか変わらず原因が読めない。
@@ -397,7 +379,6 @@ final class AppController {
         guard state.isRecording else { return }
         _ = recorder.stop()
         mediaPauser.resumeIfPaused()
-        pendingBundleId = nil
         audioDeviceChangedDuringRecording = false
         recordingLimitReached = false
         cancelRecordingLimit()
