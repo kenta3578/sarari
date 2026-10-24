@@ -12,6 +12,11 @@ final class SettingsStore: ObservableObject {
     @Published var stopSound: String {
         didSet { UserDefaults.standard.set(stopSound, forKey: "stopSound") }
     }
+    /// 効果音の大きさ（0〜1、本体の音量スライダーと同じ尺度。Issue #90）。
+    /// 本体の音量を上げても効果音はこの大きさに保つ（`SoundVolume`）。
+    @Published var soundVolume: Double {
+        didSet { UserDefaults.standard.set(soundVolume, forKey: "soundVolume") }
+    }
     /// 録音 HUD の大きさ（Issue #35）。旧「録音中に HUD を表示」トグルはこれに統合した。
     /// `.hidden` でも開始音・完了音で状態は分かる。
     @Published var hudSize: HUDSize {
@@ -24,6 +29,11 @@ final class SettingsStore: ObservableObject {
     /// 録音中に画面の縁を光らせるか（Issue #48）。HUD を見ていなくても録音中だと分かる。
     @Published var edgeGlowEnabled: Bool {
         didSet { UserDefaults.standard.set(edgeGlowEnabled, forKey: "edgeGlowEnabled") }
+    }
+    /// 録音中は他のアプリが流している音楽を一時停止するか（Issue #88）。
+    /// 既定は切り（再生/一時停止キーを送るので、意図しないアプリに届く可能性がある）。
+    @Published var pauseMediaWhileRecording: Bool {
+        didSet { UserDefaults.standard.set(pauseMediaWhileRecording, forKey: "pauseMediaWhileRecording") }
     }
     /// 挿入できなかった結果をどこに残すか（Issue #67）。
     ///
@@ -137,10 +147,12 @@ final class SettingsStore: ObservableObject {
         let storedStop  = UserDefaults.standard.string(forKey: "stopSound")  ?? "Basso"
         startSound = SoundPlayer.isAvailable(storedStart) ? storedStart : SoundPlayer.none
         stopSound  = SoundPlayer.isAvailable(storedStop)  ? storedStop  : SoundPlayer.none
+        soundVolume = UserDefaults.standard.object(forKey: "soundVolume") as? Double ?? 0.4
         hudSize = Self.storedHUDSize()
         hudPosition = UserDefaults.standard.string(forKey: "hudPosition")
             .flatMap(HUDPosition.init(rawValue:)) ?? .bottomCenter
         edgeGlowEnabled = UserDefaults.standard.object(forKey: "edgeGlowEnabled") as? Bool ?? true
+        pauseMediaWhileRecording = UserDefaults.standard.bool(forKey: "pauseMediaWhileRecording")
         resultRetention = Self.storedResultRetention()
         let storedExtra = (UserDefaults.standard.object(forKey: "hotKeyExtraKeyCode") as? Int).flatMap(UInt16.init(exactly:))
         let storedModifiers = Self.storedHotKeyModifiers()

@@ -4,6 +4,12 @@
 
 版ごとにまとめています。
 
+## v0.3.0（2026-10-24）
+
+- **アプリのアイコン**を付けました。Finder の「アプリケーション」や Spotlight で白い四角形ではなくなります（[#97](https://github.com/kenta3578/sarari/issues/97)）
+- 開始音・停止音の**大きさを設定で決められる**ようにし、Mac 本体の音量を上げても効果音は大きくならないようにしました（[#90](https://github.com/kenta3578/sarari/issues/90)）
+- 設定で入りにすると、**録音中は流れている音楽を一時停止**し、録音が終わったら再開します（[#88](https://github.com/kenta3578/sarari/issues/88)）
+
 ## v0.2.0（2026-10-01）
 
 - **Xcode なしで入れられる**ようにしました。[Releases](https://github.com/kenta3578/sarari/releases/latest) の zip を展開して「アプリケーション」に移し、開くだけです（[#73](https://github.com/kenta3578/sarari/issues/73)）

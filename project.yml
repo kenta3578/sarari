@@ -27,16 +27,19 @@ targets:
       - path: Resources/Sounds
         type: folder
         buildPhase: resources
+      # アプリアイコン（Issue #97）。原本は Resources/AppIcon.svg、scripts/make-icon.sh が書き出す。
+      - path: Resources/Assets.xcassets
     dependencies:
       - package: WhisperKit
     settings:
       base:
         PRODUCT_NAME: sarari
         PRODUCT_BUNDLE_IDENTIFIER: com.kenta3578.koebun
-        MARKETING_VERSION: "0.2.0"
-        CURRENT_PROJECT_VERSION: "2"
+        MARKETING_VERSION: "0.3.0"
+        CURRENT_PROJECT_VERSION: "3"
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: Sources/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: "5.9"
         # 言語モードは Swift 5 のまま、データ競合の検査だけ最大にする（Issue #103）。
         # 型で競合を防げているかをコンパイラに確かめさせる唯一の手段。

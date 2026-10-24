@@ -1,3 +1,5 @@
+<img src="docs/public/logo.svg" alt="" width="96">
+
 # sarari（さらり）
 
 完全ローカルで動く、Mac 用の日本語音声入力アプリ。

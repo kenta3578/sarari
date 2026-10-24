@@ -86,6 +86,16 @@ struct GeneralSettingsView: View {
             Section("サウンド") {
                 soundRow("録音開始音", selection: $settings.startSound)
                 soundRow("録音停止音", selection: $settings.stopSound)
+                HStack {
+                    Text("効果音の大きさ")
+                    Image(systemName: "speaker.fill").foregroundStyle(.secondary)
+                    Slider(value: $settings.soundVolume, in: 0...1) { editing in
+                        if !editing { preview(settings.startSound) }
+                    }
+                    .accessibilityLabel("効果音の大きさ")
+                    Image(systemName: "speaker.wave.3.fill").foregroundStyle(.secondary)
+                }
+                Toggle("録音中は再生中の音楽を一時停止する", isOn: $settings.pauseMediaWhileRecording)
 
                 HStack {
                     Button("音を追加…") { importSounds() }
@@ -128,6 +138,7 @@ struct GeneralSettingsView: View {
                 }
 
                 Text("選び直すと鳴ります。試聴ボタンでいまの音を聞き直せます。"
+                     + "効果音の大きさは Mac 本体の音量を上げても変わりません（本体の音量のほうが小さいときは本体の音量で鳴ります）。"
                      + "「sarari の音」はアプリに入っている音です。"
                      + "「音を追加…」で選んだ音声ファイル（aiff / wav / mp3 / m4a / caf）は "
                      + "\((SoundPlayer.customDirectory.path as NSString).abbreviatingWithTildeInPath) にコピーされ、「自分の音」に出ます。"
