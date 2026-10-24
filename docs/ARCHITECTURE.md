@@ -36,7 +36,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 
   await previousPipeline          前の発話の挿入が終わるまで待つ（貼る順を発話順に揃える）
   TextInjector.insert()           権限確認 → セキュア入力確認（挿入先は照合しない。貼るときにフォーカスのある場所へ）
-                                  → ⌘V 合成（既定）か 1 文字ずつ送出 → **成否判定** → 復元判断
+                                  → ⌘V 合成 → **成否判定** → 復元判断
   InsertionPresentation.make()    結果を「メニューバーの状態」と「HUD の動き」に 1 回だけ翻訳
   PipelineGuard.finish()          自分が追い越されていないかを判定（後述）
   AppState.update()               メニューバーと HUD が同じ enum から描き直る

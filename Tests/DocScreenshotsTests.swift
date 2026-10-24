@@ -56,7 +56,8 @@ struct DocScreenshotsTests {
             (0..<45).forEach { _ in model.push(level: 0) }
         }
         try await DocShots.renderHUD(name: "hud-result") { model in
-            let outcome = InsertionOutcome.failed(reason: "アクセシビリティ権限が無いため入力できません")
+            let outcome = InsertionOutcome.failed(reason: "アクセシビリティ権限が無いため入力できません",
+                                                  hint: .accessibilityPermission)
             model.status = .failed(reason: outcome.headline)
             model.pendingResult = .init(text: DocShots.sampleUtterance, title: outcome.headline,
                                         detail: outcome.detail, isFailure: true, note: nil, hint: outcome.hint)

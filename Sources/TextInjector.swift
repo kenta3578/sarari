@@ -75,7 +75,7 @@ enum InsertionOutcome: Equatable {
 /// 見比べて成否を判定し、確信が持てなければ `.uncertain` を返して結果を保全する
 /// （`docs/design-rationale.md` §4）。
 ///
-/// OS に触れる部分（クリップボード・前面アプリ・権限・⌘V と判定）は `Environment` に寄せてあり、
+/// OS に触れる部分（クリップボード・権限・パスワード欄の確認・⌘V と判定）は `Environment` に寄せてあり、
 /// テストは名前付きペーストボードとフェイクの送出で同じ手順を通せる。
 @MainActor
 final class TextInjector {
@@ -109,7 +109,6 @@ final class TextInjector {
     static func insert(_ text: String) async -> InsertionOutcome {
         await shared.insert(text)
     }
-
 
     /// 口述テキストをクリップボードへ置く。**HUD と履歴の「コピー」はここを通す。**
     ///
