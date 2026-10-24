@@ -319,13 +319,13 @@ extension TextInjector.Environment {
         TextInjector.Environment(
             pasteboard: .general,
             currentTarget: {
-                // 自分自身は除く（HUD は `.nonactivatingPanel` なので通常は前面に出ないが、
-                // 設定ウィンドウを開いていると自分が前面になりうる）。
-                guard let app = NSWorkspace.shared.frontmostApplication,
-                      app.bundleIdentifier != Bundle.main.bundleIdentifier
+                // sarari 自身も除かない。止めた時点が基準なので、設定画面で止めたら設定画面が挿入先
+                // （HUD は `.nonactivatingPanel` なので、HUD の停止ボタンでは前面にならない）。
+                guard let app = NSWorkspace.shared.frontmostApplication
                 else { return InsertionTarget(bundleId: nil) }
                 let focus = FocusSnapshot.focus(of: app.processIdentifier)
-                return InsertionTarget(bundleId: app.bundleIdentifier,
+                // バンドル ID の無いアプリ（素の実行ファイル等）は pid で見分ける。
+                return InsertionTarget(bundleId: app.bundleIdentifier ?? "pid:\(app.processIdentifier)",
                                        window: focus.window,
                                        element: focus.element)
             },

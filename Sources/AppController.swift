@@ -221,16 +221,17 @@ final class AppController {
         SoundPlayer.play(SettingsStore.shared.stopSound)
         let samples = recorder.stop()
         mediaPauser.resumeIfPaused()
-        // 挿入先は**止めた時点**の前面アプリ・窓・入力欄（Issue #107）。始めた場所と別の所へ
-        // 移ってから止め、そこへ入れる使い方があるので、録音開始時ではなくここで控える。
-        // 守るのは、止めてから貼るまで（文字起こしの数秒）に別の場所へ移ったときの誤爆。
-        // 窓と入力欄は AX の同期 IPC（1 回 0.25 秒で打ち切り）なので、録音を止めたあとに取る。
-        let expectedTarget = TextInjector.currentTarget()
         // ここで読んで戻す（この録音ぶんの事情なので、次の録音へ持ち越さない）。
         let deviceChanged = audioDeviceChangedDuringRecording
         audioDeviceChangedDuringRecording = false
         let limitReached = recordingLimitReached
         recordingLimitReached = false
+        // 挿入先は**止めた時点**の前面アプリ・窓・入力欄（Issue #107）。始めた場所と別の所へ
+        // 移ってから止め、そこへ入れる使い方があるので、録音開始時ではなくここで控える。
+        // 守るのは、止めてから貼るまで（文字起こしの数秒）に別の場所へ移ったときの誤爆。
+        // 窓と入力欄は AX の同期 IPC（1 回 0.25 秒で打ち切り）なので、録音を止めたあとに取る。
+        // 上限で止めた録音は挿入しないので取らない。
+        let expectedTarget = limitReached ? nil : TextInjector.currentTarget()
         cancelRecordingLimit()
 
         // **ユーザーが待つ実時間**をここから測る（Issue #107）。履歴の `durations` は

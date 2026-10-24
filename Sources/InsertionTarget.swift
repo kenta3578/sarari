@@ -8,7 +8,7 @@ import ApplicationServices
 /// AppKit も AX の呼び出しも持たない値なので、判定（`mismatchReason`）は単体テストで確かめられる。
 /// AX の要素は `AXUIElementCreateApplication(pid)` で権限なしに作れる。
 struct InsertionTarget {
-    /// 最前面アプリのバンドル ID。sarari 自身が前面のとき・取れないときは nil。
+    /// 最前面アプリの識別子（バンドル ID。無いアプリは `pid:<番号>`）。前面のアプリが取れないときは nil。
     let bundleId: String?
     /// 前面の窓。読めなければ nil。
     let window: AXUIElement?
@@ -24,27 +24,29 @@ struct InsertionTarget {
     /// 録音を止めたときの挿入先 `expected` と、いまの挿入先 `current` が違うなら、その理由。
     /// 同じとみなせるなら nil（挿入してよい）。
     ///
-    /// - アプリが違う、またはどちらかで sarari 自身が前面（bundleId が nil）なら止める。
-    ///   止めたときに sarari の窓が前面だった録音は、どこへ貼るつもりか分からないので照合を飛ばさない
-    /// - 同じアプリなら、窓と入力欄を `CFEqual` で比べる。**両方で読めたものだけを比べる**。
-    ///   AX が読めないアプリ（ターミナルの一部・Electron）を、読めないだけで止めないため
-    ///   （`.claude/rules/insertion-feedback.md`「失敗と断定するのは失敗だと分かるときだけ」）
+    /// - 止めたときに前面のアプリが分からなかったら照合しない（どこへ貼るつもりか比べようがない）
+    /// - アプリが違えば止める。sarari 自身も 1 つのアプリとして扱う（sarari の窓で止めたら、
+    ///   sarari の入力欄が挿入先。設定画面への口述）
+    /// - 同じアプリなら、窓と入力欄を `CFEqual` で比べる。止めたときに読めなかったものは比べない
+    ///   （AX が読めないアプリを、読めないだけで止めない）。止めたときに読めたのに貼る直前に
+    ///   読めなければ止める（入力欄以外へ移った・応答しない。移っていないと確かめられない）。
+    ///   止めても文章は HUD と履歴に残り、「もう一度挿入」で入れ直せる
     static func mismatchReason(expected: InsertionTarget, current: InsertionTarget) -> String? {
-        guard let expectedApp = expected.bundleId else { return stoppedOnSarariReason }
-        guard let currentApp = current.bundleId, currentApp == expectedApp else { return appChangedReason }
-        if differs(expected.window, current.window) || differs(expected.element, current.element) {
+        guard let expectedApp = expected.bundleId else { return nil }
+        guard current.bundleId == expectedApp else { return appChangedReason }
+        if moved(from: expected.window, to: current.window) || moved(from: expected.element, to: current.element) {
             return focusChangedReason
         }
         return nil
     }
 
-    /// 両方で読めていて、別の要素なら true。
-    private static func differs(_ a: AXUIElement?, _ b: AXUIElement?) -> Bool {
-        guard let a, let b else { return false }
-        return !CFEqual(a, b)
+    /// 止めたときに読めた要素から移ったか。止めたときに読めていなければ比べない。
+    private static func moved(from stop: AXUIElement?, to now: AXUIElement?) -> Bool {
+        guard let stop else { return false }
+        guard let now else { return true }
+        return !CFEqual(stop, now)
     }
 
     static let appChangedReason = "録音を止めたアプリから移ったため挿入しませんでした"
     static let focusChangedReason = "録音を止めた窓・入力欄から移ったため挿入しませんでした"
-    static let stoppedOnSarariReason = "録音を止めたとき sarari の窓が前面だったため挿入しませんでした"
 }
