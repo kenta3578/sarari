@@ -5,6 +5,7 @@ import os
 
 enum TranscriberError: Error {
     case notReady
+    case unexpectedVariant
 }
 
 /// WhisperKit ラッパー。large-v3-turbo を日本語で文字起こしする。
@@ -47,7 +48,14 @@ actor Transcriber: SpeechEngine {
             isCached: Self.isCached(base: base),
             fetch: { try await Self.fetch(base: base) },
             verify: { try Self.verify(targets) },
-            load: { try await WhisperKit(Self.localLoadConfig(base: base)) })
+            load: {
+                let pipeline = try await WhisperKit(Self.localLoadConfig(base: base))
+                // WhisperKit はトークナイザの名前を variant から決める。照合した
+                // `tokenizerRepo` と違う variant と判定したら、照合していないトークナイザを
+                // 読んでいるので使わない（WhisperKit を上げて対応が変わったときの網）。
+                guard pipeline.modelVariant == .largev3 else { throw TranscriberError.unexpectedVariant }
+                return pipeline
+            })
         pipe = pipeline
     }
 
@@ -84,16 +92,25 @@ actor Transcriber: SpeechEngine {
                          download: false)
     }
 
-    /// 配布元から取得する（通信はここだけ）。既にあるファイルは取得ライブラリが飛ばす。
+    /// 配布元から取得する（通信はここだけ）。**欠けている側だけ**を取りに行く。
+    ///
+    /// 揃っている側まで取得に回すと、取得ライブラリが配布元と突き合わせて、照合済みの
+    /// ファイルを上流の新しい版で上書きしうる（トークナイザが欠けただけでモデルが変わる）。
     ///
     /// どちらも**ファイルを置くだけで中身は解析しない**。解析は照合のあと（`localLoadConfig`）。
     /// トークナイザに WhisperKit の `ModelUtilities.loadTokenizer` を使わないのはそのため
     /// （取得したその場で解析する）。置き場は WhisperKit が読み込み時に探す場所と同じ。
     private static func fetch(base: URL) async throws {
-        _ = try await WhisperKit.download(variant: model, downloadBase: base)
-        _ = try await HubApi(downloadBase: base).snapshot(
-            from: HubApi.Repo(id: tokenizerRepo),
-            matching: ModelIntegrity.whisperLargeV3Tokenizer.map(\.path))
+        if !ModelIntegrity.hasAllFiles(directory: modelDirectory(base: base),
+                                       entries: ModelIntegrity.largeV3Turbo) {
+            _ = try await WhisperKit.download(variant: model, downloadBase: base)
+        }
+        if !ModelIntegrity.hasAllFiles(directory: tokenizerDirectory(base: base),
+                                       entries: ModelIntegrity.whisperLargeV3Tokenizer) {
+            _ = try await HubApi(downloadBase: base).snapshot(
+                from: HubApi.Repo(id: tokenizerRepo),
+                matching: ModelIntegrity.whisperLargeV3Tokenizer.map(\.path))
+        }
     }
 
     private static func verify(_ targets: [VerificationTarget]) throws {
