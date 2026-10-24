@@ -58,11 +58,6 @@ struct TextInjectorClipboardTests {
         deinit { pasteboard.releaseGlobally() }
     }
 
-    /// 遅らせて走る復元が全部終わるまで待つ（固定の待ちにしない）。
-    private func waitForRestores(_ injector: TextInjector) async {
-        await injector.waitUntilIdle()
-    }
-
     @Test("2回続けて挿入しても、1回目の前にコピーしていた内容に戻る")
     func twoInsertionsRestoreOriginal() async {
         let h = Harness()
@@ -71,7 +66,7 @@ struct TextInjectorClipboardTests {
 
         _ = await injector.insert("1回目", expectedBundleId: "com.example.editor")
         _ = await injector.insert("2回目", expectedBundleId: "com.example.editor")
-        await waitForRestores(injector)
+        await injector.waitUntilIdle()
 
         #expect(h.current == "元のコピー")
         // 貼った内容が入れ替わっていないこと。
@@ -89,7 +84,7 @@ struct TextInjectorClipboardTests {
         _ = await injector.insert("口述", expectedBundleId: "com.example.editor")
         _ = await injector.insert("もう一度挿入")
         _ = await injector.insert("次の口述", expectedBundleId: "com.example.editor")
-        await waitForRestores(injector)
+        await injector.waitUntilIdle()
 
         #expect(h.current == "元のコピー")
         #expect(h.pasted == ["口述", "もう一度挿入", "次の口述"])
@@ -105,7 +100,7 @@ struct TextInjectorClipboardTests {
         async let first = injector.insert("1回目", expectedBundleId: "com.example.editor")
         async let second = injector.insert("2回目", expectedBundleId: "com.example.editor")
         _ = await (first, second)
-        await waitForRestores(injector)
+        await injector.waitUntilIdle()
 
         #expect(h.current == "元のコピー")
         // どちらが先に並ぶかは決めない。重複せず1回ずつ貼られていること。
@@ -125,7 +120,7 @@ struct TextInjectorClipboardTests {
 
         _ = await injector.insert("1回目", expectedBundleId: "com.example.editor")
         _ = await injector.insert("2回目", expectedBundleId: "com.example.editor")
-        await waitForRestores(injector)
+        await injector.waitUntilIdle()
 
         #expect(h.current == "あとからのコピー")
     }
@@ -138,7 +133,7 @@ struct TextInjectorClipboardTests {
 
         _ = await injector.insert("1回目", expectedBundleId: "com.example.editor")
         _ = await injector.insert("2回目", expectedBundleId: "com.example.editor")
-        await waitForRestores(injector)
+        await injector.waitUntilIdle()
 
         #expect(h.current == nil)
         #expect(h.pasted == ["1回目", "2回目"])
@@ -157,7 +152,7 @@ struct TextInjectorClipboardTests {
         }
 
         _ = await injector.insert("口述", expectedBundleId: "com.example.editor")
-        await waitForRestores(injector)
+        await injector.waitUntilIdle()
 
         #expect(h.current == "元のコピー")
     }

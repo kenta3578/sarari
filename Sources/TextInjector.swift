@@ -285,8 +285,8 @@ final class TextInjector {
 
     /// 復元までの間に他アプリ/ユーザーがクリップボードを書き換えていたら
     /// （changeCount が変化）、その内容を踏み潰さないよう復元しない。
+    /// `pendingRestore` は書き込んだ直後に `performInsert` が控えてある。
     private func scheduleClipboardRestore(previous: PasteboardSnapshot, writtenChangeCount: Int) -> Task<Void, Never> {
-        pendingRestore = (previous, writtenChangeCount)
         let delay = environment.restoreDelay
         return Task { @MainActor in
             try? await Task.sleep(for: delay)
