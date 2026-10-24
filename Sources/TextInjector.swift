@@ -140,12 +140,22 @@ final class TextInjector {
 
     // MARK: - 挿入
 
-    /// 直前の挿入。`insert` はこれを待ってから始める。
+    /// 直前の挿入。`insert` はこれを待ってから始める。**クリップボードの復元が終わるまで**を含む。
     ///
     /// 挿入は settle/recheck の待ち（0.35〜0.8 秒）を挟むので、その間に別の挿入が入ると
     /// クリップボードと `pendingRestore` を取り合って貼る内容が入れ替わる。
     /// 呼び出し元は録音パイプラインだけでなく HUD・履歴の再挿入もあるので、入口で直列化する（Issue #99）。
+    ///
+    /// 判定が出た時点で次へ進めていた頃は、遅らせた復元より先に次の挿入が始まり、
+    /// 前の口述文を「元の内容」として退避していた。続けて口述すると、ユーザーのコピーが消えて
+    /// 口述文が残った（Issue #105）。呼び出し側へは判定が出た時点で返し、次の挿入だけを待たせる。
     private var lastInsertion: Task<Void, Never>?
+
+    /// 挿入 1 回ぶんの結果と、それが予約した復元。
+    private struct Attempt {
+        let outcome: InsertionOutcome
+        let restore: Task<Void, Never>?
+    }
 
     func insert(_ text: String, expectedBundleId: String? = nil) async -> InsertionOutcome {
         let previous = lastInsertion
@@ -153,12 +163,12 @@ final class TextInjector {
             await previous?.value
             return await performInsert(text, expectedBundleId: expectedBundleId)
         }
-        lastInsertion = Task { _ = await current.value }
-        return await current.value
+        lastInsertion = Task { await current.value.restore?.value }
+        return await current.value.outcome
     }
 
-    private func performInsert(_ text: String, expectedBundleId: String?) async -> InsertionOutcome {
-        guard !text.isEmpty else { return .succeeded }
+    private func performInsert(_ text: String, expectedBundleId: String?) async -> Attempt {
+        guard !text.isEmpty else { return Attempt(outcome: .succeeded, restore: nil) }
 
         let keepResult = environment.keepResultOnFailure()
 
@@ -173,7 +183,7 @@ final class TextInjector {
             if keepResult {
                 write(text, purpose: .injection)
             }
-            return .failed(reason: "録音したアプリが前面にないため挿入しませんでした")
+            return Attempt(outcome: .failed(reason: "録音したアプリが前面にないため挿入しませんでした"), restore: nil)
         }
 
         guard environment.isAccessibilityTrusted() else {
@@ -181,8 +191,9 @@ final class TextInjector {
             if keepResult {
                 write(text, purpose: .injection)
             }
-            return .failed(reason: "アクセシビリティ権限が無いため入力できません",
-                           hint: .accessibilityPermission)
+            return Attempt(outcome: .failed(reason: "アクセシビリティ権限が無いため入力できません",
+                                            hint: .accessibilityPermission),
+                           restore: nil)
         }
 
         // パスワード欄・Secure Keyboard Entry 中は送出そのものが届かない（Issue #104）。
@@ -193,7 +204,7 @@ final class TextInjector {
         // 場所の隣に口述文が置かれ、次の ⌘V で意図しない場所へ貼られる。
         // 結果は履歴に残り、HUD からコピーもできるので失われはしない。
         if let reason = environment.secureInputReason() {
-            return .failed(reason: reason, hint: .secureInput)
+            return Attempt(outcome: .failed(reason: reason, hint: .secureInput), restore: nil)
         }
 
         // **全 type** を退避する。プレーンテキストだけを覚えていると、スクショ・ファイル・
@@ -214,11 +225,11 @@ final class TextInjector {
         //
         // `.uncertain` は「送出は済んだ・確認手段が無いだけ」なので、貼れている可能性の方が
         // 高い。結果は履歴に必ず残るので、クリップボードは戻す方が損が小さい。
-        if !outcome.isFailure || !keepResult {
-            scheduleClipboardRestore(previous: previous, writtenChangeCount: writtenChangeCount)
+        guard !outcome.isFailure || !keepResult else {
+            return Attempt(outcome: outcome, restore: nil)
         }
-
-        return outcome
+        let restore = scheduleClipboardRestore(previous: previous, writtenChangeCount: writtenChangeCount)
+        return Attempt(outcome: outcome, restore: restore)
     }
 
     // MARK: - クリップボード
@@ -266,10 +277,10 @@ final class TextInjector {
 
     /// 復元までの間に他アプリ/ユーザーがクリップボードを書き換えていたら
     /// （changeCount が変化）、その内容を踏み潰さないよう復元しない。
-    private func scheduleClipboardRestore(previous: PasteboardSnapshot, writtenChangeCount: Int) {
+    private func scheduleClipboardRestore(previous: PasteboardSnapshot, writtenChangeCount: Int) -> Task<Void, Never> {
         pendingRestore = (previous, writtenChangeCount)
         let delay = environment.restoreDelay
-        Task { @MainActor in
+        return Task { @MainActor in
             try? await Task.sleep(for: delay)
             restoreClipboard(previous, writtenChangeCount: writtenChangeCount)
         }
