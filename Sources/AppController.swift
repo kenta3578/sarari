@@ -17,12 +17,6 @@ final class AppController {
     private let mediaPauser = MediaPauser()
     private let state = AppState.shared
 
-    /// 録音を始めた時点の最前面アプリ。挿入直前の照合に使う（Issue #80）。
-    ///
-    /// **挿入先は録音開始時に確定させる**。停止時に取り直すと、喋っている間に
-    /// アプリを切り替えただけで別のアプリへ貼ってしまう。
-    private var pendingTarget: InsertionTarget?
-
     /// アクセシビリティ権限が付くのを見張るタイマー（Issue #78）。許可を検知したら止める。
     private var accessibilityTimer: Timer?
 
@@ -209,10 +203,6 @@ final class AppController {
             // 起動音はマイクが録っている最中に鳴る。その分を棒に見せない（Issue #186）。
             // 録音・文字起こしには触らない。
             hud.ignoreLevels(forSoundOf: SoundPlayer.play(start))
-            // 挿入先（前面アプリ・窓・入力欄）を控える（Issue #80 / #107）。窓と入力欄は AX の
-            // 同期 IPC（1 回 0.25 秒で打ち切り）なので、録音と開始音を始めた**あと**に取る。
-            // 先に取ると、応答の遅いアプリで出だしの声が録れない。
-            pendingTarget = TextInjector.currentTarget()
         } catch {
             mediaPauser.resumeIfPaused()
             state.update(.failed(reason: "録音開始失敗: \(error.localizedDescription)"))
@@ -228,10 +218,14 @@ final class AppController {
         state.update(.processing)
 
         let generation = guardState.generation
-        let expectedTarget = takePendingTarget()
         SoundPlayer.play(SettingsStore.shared.stopSound)
         let samples = recorder.stop()
         mediaPauser.resumeIfPaused()
+        // 挿入先は**止めた時点**の前面アプリ・窓・入力欄（Issue #107）。始めた場所と別の所へ
+        // 移ってから止め、そこへ入れる使い方があるので、録音開始時ではなくここで控える。
+        // 守るのは、止めてから貼るまで（文字起こしの数秒）に別の場所へ移ったときの誤爆。
+        // 窓と入力欄は AX の同期 IPC（1 回 0.25 秒で打ち切り）なので、録音を止めたあとに取る。
+        let expectedTarget = TextInjector.currentTarget()
         // ここで読んで戻す（この録音ぶんの事情なので、次の録音へ持ち越さない）。
         let deviceChanged = audioDeviceChangedDuringRecording
         audioDeviceChangedDuringRecording = false
@@ -301,7 +295,7 @@ final class AppController {
         // 前の発話のパイプラインが終わるまで待つ。貼る順番を発話順に揃える（Issue #99）。
         await previousPipeline?.value
         // 挿入は成否を判定して返る。成功と確認できなければ結果を捨てない（Issue #13）。
-        // 録音を始めたアプリと違うところへ貼らないよう、照合用に渡す（Issue #80）。
+        // 録音を止めた場所と違うところへ貼らないよう、照合用に渡す（Issue #80 / #107）。
         // 上限で止めた録音は止め忘れの可能性が高いので、カーソルへは入れない（Issue #17）。
         let outcome: InsertionOutcome
         if text.isEmpty {
@@ -365,12 +359,6 @@ final class AppController {
         }
     }
 
-    /// 録音開始時に控えた挿入先を取り出す。nil なら照合しない（開始時に取れなかった場合）。
-    private func takePendingTarget() -> InsertionTarget? {
-        defer { pendingTarget = nil }
-        return pendingTarget
-    }
-
     /// 追い越されたパイプラインが見せ損ねた結果を出す（Issue #100）。
     /// 結果があれば結果パネルで残す。無ければ状態表示（失敗の原因）を HUD に前面で出す。
     /// HUD が閉じていても出す。閉じたまま状態だけ変えるとメニューバーの色しか変わらず原因が読めない。
@@ -399,7 +387,6 @@ final class AppController {
         guard state.isRecording else { return }
         _ = recorder.stop()
         mediaPauser.resumeIfPaused()
-        pendingTarget = nil
         audioDeviceChangedDuringRecording = false
         recordingLimitReached = false
         cancelRecordingLimit()

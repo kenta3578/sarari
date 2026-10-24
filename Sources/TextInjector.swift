@@ -106,13 +106,13 @@ final class TextInjector {
 
     // MARK: - 入口（static）
 
-    /// - Parameter expectedTarget: 録音を始めたときの挿入先。渡すと、挿入直前に
+    /// - Parameter expectedTarget: 録音を止めたときの挿入先。渡すと、挿入直前に
     ///   変わっていないかを照合する。nil なら照合しない（HUD・履歴からの再挿入）。
     static func insert(_ text: String, expectedTarget: InsertionTarget? = nil) async -> InsertionOutcome {
         await shared.insert(text, expectedTarget: expectedTarget)
     }
 
-    /// いまの挿入先。録音開始時にこれを控え、挿入直前に同じかを見る（Issue #80 / #107）。
+    /// いまの挿入先。録音を止めたときにこれを控え、挿入直前に同じかを見る（Issue #80 / #107）。
     /// **取る側と比べる側を同じ場所に置く**ことで、片方だけ条件が変わる事故を防ぐ。
     static func currentTarget() -> InsertionTarget {
         shared.environment.currentTarget()
@@ -174,7 +174,7 @@ final class TextInjector {
 
         let keepResult = environment.keepResultOnFailure()
 
-        // 録音を始めたアプリと違うところへ貼らない（Issue #80）。
+        // 録音を止めた場所と違うところへ貼らない（Issue #80 / #107）。
         //
         // 文字起こしと整形に数秒かかる間にアプリを切り替えると、⌘V はその時点の前面へ飛ぶ。
         // しかも before / after は両方その新しい要素なので `CFEqual` が一致し、文字数も
