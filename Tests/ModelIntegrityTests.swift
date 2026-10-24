@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import sarari
 
-/// モデル重みの照合（Issue #106）。**実モデル（約630MB）は使わない。**
+/// モデル重みとトークナイザの照合（Issue #106）。**実モデル（約630MB）は使わない。**
 /// 一時ディレクトリに小さなファイルを置いて、判定そのものを確かめる。
 struct ModelIntegrityTests {
 
@@ -15,25 +15,30 @@ struct ModelIntegrityTests {
         try body(dir)
     }
 
-    /// 「検証済み」の記録が実際の設定を汚さないよう、テスト専用の suite を使う。
-    private func scratchDefaults() -> UserDefaults {
-        UserDefaults(suiteName: "sarari.tests.\(UUID().uuidString)")!
-    }
-
     /// 中身から期待値を作る（テスト側でハッシュを手書きしない）。
     private func entry(for data: Data, at path: String) -> ModelIntegrity.Entry {
         let hex = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         return .init(path: path, sha256: hex, size: data.count)
     }
 
-    @Test("一致すれば通る")
+    private func write(_ data: Data, _ path: String, in dir: URL) throws {
+        let url = dir.appendingPathComponent(path)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try data.write(to: url)
+    }
+
+    @Test("一致すれば通る（入れ子のファイルも）")
     func matchingPasses() throws {
         try withTempDirectory { dir in
-            let data = Data("sarari".utf8)
-            try data.write(to: dir.appendingPathComponent("a.bin"))
-            try ModelIntegrity.verify(directory: dir,
-                                      entries: [entry(for: data, at: "a.bin")],
-                                      defaults: scratchDefaults())
+            let a = Data("sarari".utf8)
+            let b = Data("weights".utf8)
+            try write(a, "a.bin", in: dir)
+            try write(b, "Model.mlmodelc/weights/weight.bin", in: dir)
+            try ModelIntegrity.verify(directory: dir, entries: [
+                entry(for: a, at: "a.bin"),
+                entry(for: b, at: "Model.mlmodelc/weights/weight.bin"),
+            ])
         }
     }
 
@@ -43,22 +48,20 @@ struct ModelIntegrityTests {
             #expect(throws: ModelIntegrity.VerificationError.self) {
                 try ModelIntegrity.verify(
                     directory: dir,
-                    entries: [.init(path: "無い.bin", sha256: String(repeating: "0", count: 64), size: 1)],
-                    defaults: scratchDefaults())
+                    entries: [.init(path: "無い.bin", sha256: String(repeating: "0", count: 64), size: 1)])
             }
         }
     }
 
-    /// サイズを先に見るのは、数百 MB を読まずに落とすため。
     @Test("サイズが違えば落ちる")
     func sizeMismatchFails() throws {
         try withTempDirectory { dir in
             let data = Data("sarari".utf8)
-            try data.write(to: dir.appendingPathComponent("a.bin"))
+            try write(data, "a.bin", in: dir)
             let base = entry(for: data, at: "a.bin")
             let wrong = ModelIntegrity.Entry(path: base.path, sha256: base.sha256, size: base.size + 1)
             #expect(throws: ModelIntegrity.VerificationError.self) {
-                try ModelIntegrity.verify(directory: dir, entries: [wrong], defaults: scratchDefaults())
+                try ModelIntegrity.verify(directory: dir, entries: [wrong])
             }
         }
     }
@@ -69,58 +72,121 @@ struct ModelIntegrityTests {
         try withTempDirectory { dir in
             let original = Data("sarari".utf8)
             let tampered = Data("sararI".utf8)  // 同じ長さ
-            try tampered.write(to: dir.appendingPathComponent("a.bin"))
+            try write(tampered, "a.bin", in: dir)
             let expected = entry(for: original, at: "a.bin")
             #expect(expected.size == tampered.count)
             #expect(throws: ModelIntegrity.VerificationError.self) {
-                try ModelIntegrity.verify(directory: dir, entries: [expected], defaults: scratchDefaults())
+                try ModelIntegrity.verify(directory: dir, entries: [expected])
             }
         }
     }
 
-    /// 一度通ったら読み飛ばすが、**マニフェストを差し替えたら必ず再検証**されること。
-    @Test("同じマニフェストなら 2 回目は読み飛ばし、変えれば読み直す")
-    func revalidatesWhenManifestChanges() throws {
+    /// 完了条件「照合済みのあとにファイルが変わったら検出される」。
+    /// 以前は一度通ると印を残し、以後はファイルを読まずに通していた。
+    @Test("一度通ったあとにファイルが変わったら、次の照合で落ちる")
+    func detectsChangeAfterSuccessfulVerification() throws {
         try withTempDirectory { dir in
             let data = Data("sarari".utf8)
-            let url = dir.appendingPathComponent("a.bin")
-            try data.write(to: url)
-            let defaults = scratchDefaults()
+            try write(data, "a.bin", in: dir)
             let entries = [entry(for: data, at: "a.bin")]
-            try ModelIntegrity.verify(directory: dir, entries: entries, defaults: defaults)
+            try ModelIntegrity.verify(directory: dir, entries: entries)
+            try ModelIntegrity.verify(directory: dir, entries: entries)
 
-            // 記録があるので、中身を壊しても同じマニフェストなら通ってしまう（＝読み飛ばし）。
-            try Data("SARARI".utf8).write(to: url)
-            try ModelIntegrity.verify(directory: dir, entries: entries, defaults: defaults)
-
-            // マニフェストを変えれば版が変わるので、今度は読み直して落ちる。
-            let other = [ModelIntegrity.Entry(path: "a.bin",
-                                              sha256: String(repeating: "a", count: 64),
-                                              size: data.count)]
+            try write(Data("SARARI".utf8), "a.bin", in: dir)  // 同じ長さで中身だけ変える
             #expect(throws: ModelIntegrity.VerificationError.self) {
-                try ModelIntegrity.verify(directory: dir, entries: other, defaults: defaults)
+                try ModelIntegrity.verify(directory: dir, entries: entries)
             }
         }
     }
 
-    @Test("マニフェストを 1 文字でも変えれば版が変わる")
-    func manifestDigestChanges() {
-        let a = [ModelIntegrity.Entry(path: "a", sha256: "aa", size: 1)]
-        let b = [ModelIntegrity.Entry(path: "a", sha256: "ab", size: 1)]
-        #expect(ModelIntegrity.manifestDigest(a) != ModelIntegrity.manifestDigest(b))
+    /// 読み込む側はディレクトリの中をファイル名で探す（例: トークナイザは
+    /// `chat_template.jinja` があれば読む）。**マニフェストに無いファイルは、
+    /// 照合していないのに読まれうる**ので、置かれていたら通さない。
+    @Test("マニフェストに無いファイルが置かれていたら落ちる", arguments: ["chat_template.jinja", "chat_template.json"])
+    func unexpectedFileFails(extra: String) throws {
+        try withTempDirectory { dir in
+            // トークナイザのディレクトリと同じ並び（中身は小さな代用品）。
+            var entries: [ModelIntegrity.Entry] = []
+            for path in ModelIntegrity.whisperLargeV3Tokenizer.map(\.path) {
+                let data = Data(path.utf8)
+                try write(data, path, in: dir)
+                entries.append(entry(for: data, at: path))
+            }
+            try ModelIntegrity.verify(directory: dir, entries: entries)
+
+            try write(Data("extra".utf8), extra, in: dir)
+            #expect(throws: ModelIntegrity.VerificationError.self) {
+                try ModelIntegrity.verify(directory: dir, entries: entries)
+            }
+        }
     }
 
-    @Test("版は並び順に依存しない")
-    func manifestDigestIsOrderIndependent() {
-        let a = [ModelIntegrity.Entry(path: "a", sha256: "aa", size: 1),
-                 ModelIntegrity.Entry(path: "b", sha256: "bb", size: 2)]
-        #expect(ModelIntegrity.manifestDigest(a) == ModelIntegrity.manifestDigest(a.reversed()))
+    @Test("入れ子に足されたファイルも、マニフェストに無ければ落ちる")
+    func unexpectedNestedFileFails() throws {
+        try withTempDirectory { dir in
+            let data = Data("weights".utf8)
+            try write(data, "Model.mlmodelc/weights/weight.bin", in: dir)
+            try write(Data("extra".utf8), "Model.mlmodelc/weights/.extra.bin", in: dir)
+            #expect(throws: ModelIntegrity.VerificationError.self) {
+                try ModelIntegrity.verify(directory: dir,
+                                          entries: [entry(for: data, at: "Model.mlmodelc/weights/weight.bin")])
+            }
+        }
+    }
+
+    /// 取得ライブラリが置く `.cache`（取得時のメタデータ）と Finder の `.DS_Store` は
+    /// 読み込みでは使われないので、照合の対象外にする。
+    @Test("取得時のメタデータと .DS_Store は対象外")
+    func ignoresDownloadMetadata() throws {
+        try withTempDirectory { dir in
+            let data = Data("sarari".utf8)
+            try write(data, "tokenizer.json", in: dir)
+            try write(Data("{}".utf8), ".cache/huggingface/download/tokenizer.json.metadata", in: dir)
+            try write(Data("x".utf8), ".DS_Store", in: dir)
+            try ModelIntegrity.verify(directory: dir, entries: [entry(for: data, at: "tokenizer.json")])
+        }
+    }
+
+    /// 無視するのは**最上位の** `.cache` と、名前がちょうど `.DS_Store` のファイルだけ。
+    @Test("入れ子の .cache や .DS_Store に似た名前は対象外にしない",
+          arguments: ["Model.mlmodelc/.cache/x.bin", "sub/.DS_Store_evil.bin", ".cache.bin"])
+    func doesNotIgnoreLookalikes(extra: String) throws {
+        try withTempDirectory { dir in
+            let data = Data("sarari".utf8)
+            try write(data, "tokenizer.json", in: dir)
+            try write(Data("extra".utf8), extra, in: dir)
+            #expect(throws: ModelIntegrity.VerificationError.self) {
+                try ModelIntegrity.verify(directory: dir, entries: [entry(for: data, at: "tokenizer.json")])
+            }
+        }
+    }
+
+    @Test("全ファイルが揃っているかを、中身を読まずに判定できる")
+    func hasAllFiles() throws {
+        try withTempDirectory { dir in
+            let data = Data("sarari".utf8)
+            let entries = [entry(for: data, at: "a.bin"), entry(for: data, at: "sub/b.bin")]
+            #expect(!ModelIntegrity.hasAllFiles(directory: dir, entries: entries))
+            try write(data, "a.bin", in: dir)
+            #expect(!ModelIntegrity.hasAllFiles(directory: dir, entries: entries))
+            try write(data, "sub/b.bin", in: dir)
+            #expect(ModelIntegrity.hasAllFiles(directory: dir, entries: entries))
+        }
     }
 
     /// 貼り替えミスで検証が素通りするのを防ぐ。
-    @Test("同梱のマニフェストが 22 ファイルぶん揃っている")
-    func bundledManifestIsComplete() {
+    @Test("同梱のモデルのマニフェストが 22 ファイルぶん揃っている")
+    func bundledModelManifestIsComplete() {
         #expect(ModelIntegrity.largeV3Turbo.count == 22)
         #expect(ModelIntegrity.largeV3Turbo.allSatisfy { $0.sha256.count == 64 && $0.size > 0 })
+    }
+
+    /// トークナイザの読み込み（swift-transformers の `LanguageModelConfigurationFromHub`）が
+    /// 必ず読む 3 ファイル。認識結果の文字列はここで決まるので、重みと同じく照合する。
+    @Test("同梱のトークナイザのマニフェストが、読み込まれる 3 ファイルを持つ")
+    func bundledTokenizerManifestCoversLoadedFiles() {
+        let paths = Set(ModelIntegrity.whisperLargeV3Tokenizer.map(\.path))
+        #expect(paths == ["config.json", "tokenizer.json", "tokenizer_config.json"])
+        #expect(ModelIntegrity.whisperLargeV3Tokenizer.allSatisfy { $0.sha256.count == 64 && $0.size > 0 })
     }
 }

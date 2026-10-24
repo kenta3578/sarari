@@ -1,9 +1,11 @@
 import Foundation
+import Hub
 import os
 @preconcurrency import WhisperKit
 
 enum TranscriberError: Error {
     case notReady
+    case unexpectedVariant
 }
 
 /// WhisperKit ラッパー。large-v3-turbo を日本語で文字起こしする。
@@ -21,36 +23,101 @@ actor Transcriber: SpeechEngine {
     /// Distil 系は英語専用なので使えない。
     static let model = "large-v3-v20240930_turbo_632MB"
 
-    /// モデルをロードする。**無ければダウンロードする。**
+    /// トークナイザの取得元。WhisperKit が turbo（logits 51866・encoder 1280 → `.largev3`）に
+    /// 選ぶ名前（`ModelUtilities.tokenizerNameForVariant`。internal なので写してある）。
+    /// **WhisperKit を上げたら、この対応が変わっていないかを確かめる。**
+    static let tokenizerRepo = "openai/whisper-large-v3"
+
+    /// モデルを読み込む。手元に揃っていなければ取得する（Issue #106）。
     ///
-    /// 以前は `modelFolder` にキャッシュのパスを渡していたが、WhisperKit は
-    /// `modelFolder` が非 nil だと**ダウンロード分岐に入らない**
-    /// （`if let folder = modelFolder { ... } else if download { ...ダウンロード... }`）。
-    /// 開発機には既にキャッシュがあったので気づかれないまま、他人が WhisperKit を選ぶと
-    /// 2.9GB は永久に落ちてこず、録音のたびに `modelsUnavailable` になっていた（Issue #83）。
+    /// 取得と読み込みを分けている。以前は `download: true` で毎回 WhisperKit に任せていたので、
+    /// 起動とエンジン切り替えのたびに配布元へ更新の問い合わせが出て、上流が変われば取り直し、
+    /// 照合も読み込みの後だった。今は:
     ///
-    /// `modelFolder` を渡さないと `load` の既定が false になる（`config.load ??
-    /// (config.modelFolder != nil)`）ので、明示的に true にする。既にキャッシュがあれば
-    /// HubApi が既存ファイルを見るので再ダウンロードは走らない。
+    /// - 取得は、モデルかトークナイザのファイルが欠けているときだけ（初回・壊れて消したとき）
+    /// - 照合は毎回、読み込みの前と後（順番は `ModelLoadSequence`）
+    /// - 読み込みは照合したディレクトリだけを指し、`download: false`（`localLoadConfig`）
+    ///
+    /// 取得に WhisperKit の既定（`modelFolder` 無し + `download: true`）を使わないのは、
+    /// 照合より先に CoreML へ読ませてしまうため。逆に `modelFolder` を渡すと WhisperKit は
+    /// 取得しない（Issue #83 で踏んだ）ので、取得は `fetch` で明示的にやる。
     func load() async throws {
-        let config = WhisperKitConfig(model: Self.model,
-                                      downloadBase: Self.prepareDownloadBase(),
-                                      load: true,
-                                      download: true)
-        // まず取得（既にあれば HubApi が既存ファイルを見るので走らない）。
-        let pipeline = try await WhisperKit(config)
-        // **読み込んだ後ではなく、使う前に照合する。** WhisperKit には revision を渡す口が
-        // 無く main を追い続けるので、書き換えられたら黙って別の重みを読む（Issue #106）。
-        // 一致しなければ throw して、この pipe を使わせない。
-        try Self.verifyDownloadedModel()
+        guard let base = Self.prepareDownloadBase() else { throw TranscriberError.notReady }
+        let targets = Self.verificationTargets(base: base)
+        let pipeline = try await ModelLoadSequence.run(
+            isCached: Self.isCached(base: base),
+            fetch: { try await Self.fetch(base: base) },
+            verify: { try Self.verify(targets) },
+            load: {
+                let pipeline = try await WhisperKit(Self.localLoadConfig(base: base))
+                // WhisperKit はトークナイザの名前を variant から決める。照合した
+                // `tokenizerRepo` と違う variant と判定したら、照合していないトークナイザを
+                // 読んでいるので使わない（WhisperKit を上げて対応が変わったときの網）。
+                guard pipeline.modelVariant == .largev3 else { throw TranscriberError.unexpectedVariant }
+                return pipeline
+            })
         pipe = pipeline
     }
 
-    /// キャッシュ上のモデルを記録と照合する。同じマニフェストで一度通っていれば読み飛ばす。
-    private static func verifyDownloadedModel() throws {
-        guard let directory = modelDirectory else { return }
+    /// 照合する 1 組（ディレクトリとマニフェスト）。
+    struct VerificationTarget: Sendable {
+        let directory: URL
+        let entries: [ModelIntegrity.Entry]
+    }
+
+    /// WhisperKit が読むディレクトリと、それぞれのマニフェスト。
+    static func verificationTargets(base: URL) -> [VerificationTarget] {
+        [
+            .init(directory: modelDirectory(base: base), entries: ModelIntegrity.largeV3Turbo),
+            .init(directory: tokenizerDirectory(base: base), entries: ModelIntegrity.whisperLargeV3Tokenizer),
+        ]
+    }
+
+    /// モデルとトークナイザのファイルが全部あるか（中身は読まない）。
+    static func isCached(base: URL) -> Bool {
+        verificationTargets(base: base).allSatisfy {
+            ModelIntegrity.hasAllFiles(directory: $0.directory, entries: $0.entries)
+        }
+    }
+
+    /// 手元のファイルだけで読み込む設定。取得はしない。
+    ///
+    /// トークナイザは `<tokenizerFolder>/models/<repo id>/` を最初に探すので、
+    /// `tokenizerFolder` を `base` にすると照合した `tokenizerDirectory` が読まれる。
+    static func localLoadConfig(base: URL) -> WhisperKitConfig {
+        WhisperKitConfig(downloadBase: base,
+                         modelFolder: modelDirectory(base: base).path,
+                         tokenizerFolder: base,
+                         load: true,
+                         download: false)
+    }
+
+    /// 配布元から取得する（通信はここだけ）。**欠けている側だけ**を取りに行く。
+    ///
+    /// 揃っている側まで取得に回すと、取得ライブラリが配布元と突き合わせて、照合済みの
+    /// ファイルを上流の新しい版で上書きしうる（トークナイザが欠けただけでモデルが変わる）。
+    ///
+    /// どちらも**ファイルを置くだけで中身は解析しない**。解析は照合のあと（`localLoadConfig`）。
+    /// トークナイザに WhisperKit の `ModelUtilities.loadTokenizer` を使わないのはそのため
+    /// （取得したその場で解析する）。置き場は WhisperKit が読み込み時に探す場所と同じ。
+    private static func fetch(base: URL) async throws {
+        if !ModelIntegrity.hasAllFiles(directory: modelDirectory(base: base),
+                                       entries: ModelIntegrity.largeV3Turbo) {
+            _ = try await WhisperKit.download(variant: model, downloadBase: base)
+        }
+        if !ModelIntegrity.hasAllFiles(directory: tokenizerDirectory(base: base),
+                                       entries: ModelIntegrity.whisperLargeV3Tokenizer) {
+            _ = try await HubApi(downloadBase: base).snapshot(
+                from: HubApi.Repo(id: tokenizerRepo),
+                matching: ModelIntegrity.whisperLargeV3Tokenizer.map(\.path))
+        }
+    }
+
+    private static func verify(_ targets: [VerificationTarget]) throws {
         do {
-            try ModelIntegrity.verify(directory: directory)
+            for target in targets {
+                try ModelIntegrity.verify(directory: target.directory, entries: target.entries)
+            }
         } catch {
             Log.asr.error("モデルの照合に失敗しました: \(error.localizedDescription)")
             throw error
@@ -69,7 +136,7 @@ actor Transcriber: SpeechEngine {
             .appendingPathComponent("huggingface", isDirectory: true)
     }
 
-    /// 保存先を用意して返す。作れなければ nil を返す（WhisperKit の既定に落ちる）。
+    /// 保存先を用意して返す。場所が決まらなければ nil（読み込みは止まる）。
     private static func prepareDownloadBase() -> URL? {
         guard var base = downloadBase else { return nil }
         do {
@@ -79,27 +146,29 @@ actor Transcriber: SpeechEngine {
             values.isExcludedFromBackup = true
             try base.setResourceValues(values)
         } catch {
-            // 失敗しても取得自体は続けられる（その場合だけ既定の場所に落ちる）。
+            // 作れなくても続ける。取得のときに取得ライブラリが同じ場所を作り直す。
             Log.asr.error("モデルの保存先を用意できませんでした: \(error.localizedDescription)")
         }
         return base
     }
 
     /// モデルのディレクトリ。HubApi は `<downloadBase>/models/<repo id>/` に展開する。
-    static var modelDirectory: URL? {
-        downloadBase?
-            .appendingPathComponent("models/argmaxinc/whisperkit-coreml", isDirectory: true)
+    static var modelDirectory: URL? { downloadBase.map(modelDirectory(base:)) }
+
+    static func modelDirectory(base: URL) -> URL {
+        base.appendingPathComponent("models/argmaxinc/whisperkit-coreml", isDirectory: true)
             .appendingPathComponent("openai_whisper-\(model)", isDirectory: true)
     }
 
-    /// モデルが既にダウンロード済みか。UI に「ダウンロード中」を出すかの判断に使う。
-    static var hasCachedModel: Bool {
-        // 一式のうち1つでも欠けると `loadModels` が modelsUnavailable を投げるので、
-        // 代表として MelSpectrogram の有無を見る。
-        guard let probe = modelDirectory?.appendingPathComponent("MelSpectrogram.mlmodelc")
-        else { return false }
-        return FileManager.default.fileExists(atPath: probe.path)
+    /// トークナイザのディレクトリ。モデルと同じく HubApi の並び。
+    static var tokenizerDirectory: URL? { downloadBase.map(tokenizerDirectory(base:)) }
+
+    static func tokenizerDirectory(base: URL) -> URL {
+        base.appendingPathComponent("models/\(tokenizerRepo)", isDirectory: true)
     }
+
+    /// モデルが取得済みか。UI に「ダウンロード中」を出すかの判断に使う。
+    static var hasCachedModel: Bool { downloadBase.map(isCached(base:)) ?? false }
 
     /// 常駐を解除してメモリを返す。Apple 音声認識へ切り替えたときに呼ぶ。
     func unload() {

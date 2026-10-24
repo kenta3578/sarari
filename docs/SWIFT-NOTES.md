@@ -68,6 +68,7 @@ sarariApp.swift   @main（アプリの入口。Web でいう main.ts / _app.tsx�
 | `AppleTranscriber.swift` | OS 内蔵の音声認識（既定） | 外部 API を呼ばない音声認識 |
 | `Transcriber.swift` | WhisperKit（大きいモデル）での文字起こし | ローカルの推論ライブラリ呼び出し |
 | `ModelIntegrity.swift` | ダウンロードしたモデルが改竄されていないかの照合 | `package-lock.json` の integrity ハッシュ検証 |
+| `ModelLoadSequence.swift` | モデルを取得・照合・読み込む順番 | 起動時の初期化手順 |
 
 ### テキストを整える・入れる
 
