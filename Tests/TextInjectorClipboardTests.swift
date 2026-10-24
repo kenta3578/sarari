@@ -35,7 +35,7 @@ struct TextInjectorClipboardTests {
                     pasted.append(pasteboard.string(forType: .string))
                     Task { @MainActor [self] in
                         try? await Task.sleep(for: TextInjectorClipboardTests.lateReadDelay)
-                        lateReads.append(pasteboard.string(forType: .string))
+                        self.lateReads.append(self.pasteboard.string(forType: .string))
                     }
                     duringDeliver?()
                     // 本物は 350ms 以上待って判定する。ここでも中断点を挟む。

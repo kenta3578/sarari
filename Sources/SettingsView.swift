@@ -218,11 +218,13 @@ struct GeneralSettingsView: View {
                         Text(retention.label).tag(retention)
                     }
                 }
-                Text("**どれを選んでも履歴には必ず残ります。**"
-                     + "クリップボードに残すのは、アクセシビリティ権限が無くて"
-                     + "挿入できなかったときだけです。"
-                     + "ターミナルのように結果を確認できないアプリでは、挿入は済んでいる可能性が高いので"
-                     + "クリップボードは元へ戻します。")
+                // `**…。**ク` は CommonMark の規則で閉じず ** がそのまま出るので、太字は Text で付ける。
+                Text("""
+                    \(Text("どれを選んでも履歴には必ず残ります。").bold())\
+                    クリップボードに残すのは、アクセシビリティ権限が無くて挿入できなかったときだけです。\
+                    ターミナルのように結果を確認できないアプリでは、挿入は済んでいる可能性が高いので\
+                    クリップボードは元へ戻します。
+                    """)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

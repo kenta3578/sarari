@@ -56,8 +56,9 @@ struct DocScreenshotsTests {
             (0..<45).forEach { _ in model.push(level: 0) }
         }
         try await DocShots.renderHUD(name: "hud-result") { model in
-            let outcome = InsertionOutcome.failed(reason: "アクセシビリティ権限が無いため入力できません",
-                                                  hint: .accessibilityPermission)
+            // 説明書の「入れたい場所をクリックしてから『もう一度挿入』」が効く失敗を見本にする。
+            // 権限なしだと再挿入も通らず、「設定を開く」ボタンが増えて説明書の alt と合わなくなる。
+            let outcome = InsertionOutcome.failed(reason: "パスワード欄には入力しません", hint: .secureInput)
             model.status = .failed(reason: outcome.headline)
             model.pendingResult = .init(text: DocShots.sampleUtterance, title: outcome.headline,
                                         detail: outcome.detail, isFailure: true, note: nil, hint: outcome.hint)
