@@ -73,7 +73,7 @@ Mac（Apple Silicon）で、音声 → 文字起こし → カーソルへ直挿
 
 **出す時機**: 更新履歴の「次の版」に使う人から見た変化が溜まり、かつ develop の版を実機で数日使って困りごとが出ていないとき。日付では決めない。
 
-1. `project.yml` の `MARKETING_VERSION` を上げ、`docs/changelog.md` の「次の版」を `vX.Y.Z（YYYY-MM-DD）` に改名する（develop への PR）
+1. `project.yml` の `MARKETING_VERSION` と `CURRENT_PROJECT_VERSION` を上げ、`docs/changelog.md` の「次の版」を `vX.Y.Z（YYYY-MM-DD）` に改名する（develop への PR）。**同じ PR で `docs/MANUAL.md` を「次の版」の各項目と今の `Sources/` の挙動に突き合わせ、ズレを直す**（各 PR で直す決まりの取りこぼしをここで拾う。CI で自動更新しないのは、公開リポでは Actions のログと bot の PR が誰でも見えるため）
 2. develop → main の PR を作ってマージする（`gh pr create --base main --head develop`）
 3. main の先頭にタグを打つ: `git tag -a vX.Y.Z origin/main -m vX.Y.Z && git push origin vX.Y.Z`
 4. タグの push で `release` ワークフローが走り、Releases に `sarari-vX.Y.Z.zip` が付いたことを確かめる（`gh release view vX.Y.Z`）。タグと `MARKETING_VERSION` が違うと止まる
