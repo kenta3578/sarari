@@ -102,14 +102,21 @@ struct ModelIntegrityTests {
     /// 読み込む側はディレクトリの中をファイル名で探す（例: トークナイザは
     /// `chat_template.jinja` があれば読む）。**マニフェストに無いファイルは、
     /// 照合していないのに読まれうる**ので、置かれていたら通さない。
-    @Test("マニフェストに無いファイルが置かれていたら落ちる")
-    func unexpectedFileFails() throws {
+    @Test("マニフェストに無いファイルが置かれていたら落ちる", arguments: ["chat_template.jinja", "chat_template.json"])
+    func unexpectedFileFails(extra: String) throws {
         try withTempDirectory { dir in
-            let data = Data("sarari".utf8)
-            try write(data, "tokenizer.json", in: dir)
-            try write(Data("extra".utf8), "chat_template.jinja", in: dir)
+            // トークナイザのディレクトリと同じ並び（中身は小さな代用品）。
+            var entries: [ModelIntegrity.Entry] = []
+            for path in ModelIntegrity.whisperLargeV3Tokenizer.map(\.path) {
+                let data = Data(path.utf8)
+                try write(data, path, in: dir)
+                entries.append(entry(for: data, at: path))
+            }
+            try ModelIntegrity.verify(directory: dir, entries: entries)
+
+            try write(Data("extra".utf8), extra, in: dir)
             #expect(throws: ModelIntegrity.VerificationError.self) {
-                try ModelIntegrity.verify(directory: dir, entries: [entry(for: data, at: "tokenizer.json")])
+                try ModelIntegrity.verify(directory: dir, entries: entries)
             }
         }
     }
@@ -137,6 +144,20 @@ struct ModelIntegrityTests {
             try write(Data("{}".utf8), ".cache/huggingface/download/tokenizer.json.metadata", in: dir)
             try write(Data("x".utf8), ".DS_Store", in: dir)
             try ModelIntegrity.verify(directory: dir, entries: [entry(for: data, at: "tokenizer.json")])
+        }
+    }
+
+    /// 無視するのは**最上位の** `.cache` と、名前がちょうど `.DS_Store` のファイルだけ。
+    @Test("入れ子の .cache や .DS_Store に似た名前は対象外にしない",
+          arguments: ["Model.mlmodelc/.cache/x.bin", "sub/.DS_Store_evil.bin", ".cache.bin"])
+    func doesNotIgnoreLookalikes(extra: String) throws {
+        try withTempDirectory { dir in
+            let data = Data("sarari".utf8)
+            try write(data, "tokenizer.json", in: dir)
+            try write(Data("extra".utf8), extra, in: dir)
+            #expect(throws: ModelIntegrity.VerificationError.self) {
+                try ModelIntegrity.verify(directory: dir, entries: [entry(for: data, at: "tokenizer.json")])
+            }
         }
     }
 
