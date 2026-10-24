@@ -74,36 +74,80 @@ enum InsertionOutcome: Equatable {
 /// Accessibility 権限が要る。挿入後は Accessibility API で挿入先の文字数・caret を
 /// 見比べて成否を判定し、確信が持てなければ `.uncertain` を返して結果を保全する
 /// （`docs/design-rationale.md` §4）。
+///
+/// OS に触れる部分（クリップボード・前面アプリ・権限・⌘V と判定）は `Environment` に寄せてあり、
+/// テストは名前付きペーストボードとフェイクの送出で同じ手順を通せる。
 @MainActor
-enum TextInjector {
-    /// ペーストが挿入先に反映されるのを待つ時間。
-    private static let settleDelay: Duration = .milliseconds(350)
-    /// 判定後、クリップボードを復元するまでの追加待ち（合計 0.6 秒＝従来の復元タイミング）。
-    private static let restoreDelay: Duration = .milliseconds(250)
-    // MARK: - 入口
+final class TextInjector {
+    /// アプリが使う本物。呼び出し側は static の入口からこれを使う。
+    static let shared = TextInjector(environment: .live)
 
-    /// 直前の挿入。`insert` はこれを待ってから始める。
-    ///
-    /// 挿入は settle/recheck の待ち（0.35〜0.8 秒）を挟むので、その間に別の挿入が入ると
-    /// `NSPasteboard.general` と `pendingRestore` を取り合って貼る内容が入れ替わる。
-    /// 呼び出し元は録音パイプラインだけでなく HUD・履歴の再挿入もあるので、入口で直列化する（Issue #99）。
-    private static var lastInsertion: Task<Void, Never>?
+    /// 挿入が触る外の世界。
+    struct Environment {
+        var pasteboard: NSPasteboard
+        /// 最前面アプリのバンドル ID（自分自身は nil）。
+        var frontmostBundleId: @MainActor () -> String?
+        var isAccessibilityTrusted: @MainActor () -> Bool
+        /// 挿入してはいけない状態ならその理由（パスワード欄・Secure Keyboard Entry）。
+        var secureInputReason: @MainActor () -> String?
+        /// ⌘V を送り、挿入先の変化から成否を判定する。クリップボードは書き込み済みで呼ばれる。
+        var deliver: @MainActor (_ text: String) async -> InsertionOutcome
+        /// `.failed` のときクリップボードに結果を残すか（設定）。
+        var keepResultOnFailure: @MainActor () -> Bool
+        /// 判定後、クリップボードを復元するまでの追加待ち。
+        var restoreDelay: Duration
+    }
+
+    let environment: Environment
+
+    init(environment: Environment) {
+        self.environment = environment
+    }
+
+    // MARK: - 入口（static）
 
     /// - Parameter expectedBundleId: 録音を始めたときに前面だったアプリ。渡すと、挿入直前に
     ///   前面が変わっていないかを照合する。nil なら照合しない（HUD・履歴からの再挿入）。
+    static func insert(_ text: String, expectedBundleId: String? = nil) async -> InsertionOutcome {
+        await shared.insert(text, expectedBundleId: expectedBundleId)
+    }
+
     /// 最前面アプリのバンドル ID。**自分自身は除く**（HUD は `.nonactivatingPanel` なので
     /// 通常は前面に出ないが、設定ウィンドウを開いていると自分が前面になりうる）。
     ///
     /// 録音開始時にこれを控え、挿入直前に同じ値かを見る（Issue #80）。**取る側と比べる側を
     /// 同じ場所に置く**ことで、片方だけ条件が変わる事故を防ぐ。
     static func frontmostBundleId() -> String? {
-        guard let app = NSWorkspace.shared.frontmostApplication,
-              app.bundleIdentifier != Bundle.main.bundleIdentifier
-        else { return nil }
-        return app.bundleIdentifier
+        shared.environment.frontmostBundleId()
     }
 
-    static func insert(_ text: String, expectedBundleId: String? = nil) async -> InsertionOutcome {
+    /// 口述テキストをクリップボードへ置く。**HUD と履歴の「コピー」はここを通す。**
+    ///
+    /// 経路を 1 つに寄せることで、機密の目印の付け方が漏れないようにする。
+    /// 以前は HUD と履歴が `NSPasteboard` を直接叩いていた（Issue #79）。
+    ///
+    /// **`Concealed` だけを立てる。** ユーザーが自分の意思でコピーしたものなので、
+    /// クリップボードマネージャの履歴には**残ってよい**（残らないと「さっきコピーしたのに
+    /// 履歴に無い」になる）。伏字扱いにするかは各マネージャの判断に任せる。
+    static func copyToPasteboard(_ text: String) {
+        shared.write(text, purpose: .userCopy)
+    }
+
+    /// アプリ終了時の取りこぼしを防ぐ。復元待ちが残っていれば同期的に戻す（Issue #79）。
+    static func restorePendingClipboard() {
+        shared.restorePendingClipboard()
+    }
+
+    // MARK: - 挿入
+
+    /// 直前の挿入。`insert` はこれを待ってから始める。
+    ///
+    /// 挿入は settle/recheck の待ち（0.35〜0.8 秒）を挟むので、その間に別の挿入が入ると
+    /// クリップボードと `pendingRestore` を取り合って貼る内容が入れ替わる。
+    /// 呼び出し元は録音パイプラインだけでなく HUD・履歴の再挿入もあるので、入口で直列化する（Issue #99）。
+    private var lastInsertion: Task<Void, Never>?
+
+    func insert(_ text: String, expectedBundleId: String? = nil) async -> InsertionOutcome {
         let previous = lastInsertion
         let current = Task { @MainActor in
             await previous?.value
@@ -113,11 +157,10 @@ enum TextInjector {
         return await current.value
     }
 
-    private static func performInsert(_ text: String, expectedBundleId: String?) async -> InsertionOutcome {
+    private func performInsert(_ text: String, expectedBundleId: String?) async -> InsertionOutcome {
         guard !text.isEmpty else { return .succeeded }
 
-        let settings = SettingsStore.shared
-        let keepResult = settings.keepResultOnClipboardWhenUnsure
+        let keepResult = environment.keepResultOnFailure()
 
         // 録音を始めたアプリと違うところへ貼らない（Issue #80）。
         //
@@ -125,18 +168,18 @@ enum TextInjector {
         // しかも before / after は両方その新しい要素なので `CFEqual` が一致し、文字数も
         // 増えるので **「成功」と判定されて誤爆が検知されなかった**。
         if let expectedBundleId,
-           let current = Self.frontmostBundleId(),
+           let current = environment.frontmostBundleId(),
            current != expectedBundleId {
             if keepResult {
-                _ = write(text, purpose: .injection)
+                write(text, purpose: .injection)
             }
             return .failed(reason: "録音したアプリが前面にないため挿入しませんでした")
         }
 
-        guard AXIsProcessTrusted() else {
+        guard environment.isAccessibilityTrusted() else {
             // CGEvent の送出自体ができない。結果だけでも拾えるようにしてから返す。
             if keepResult {
-                _ = write(text, purpose: .injection)
+                write(text, purpose: .injection)
             }
             return .failed(reason: "アクセシビリティ権限が無いため入力できません",
                            hint: .accessibilityPermission)
@@ -149,36 +192,28 @@ enum TextInjector {
         // **この経路だけはクリップボードに残さない。** 残すと、パスワードを入れようとしている
         // 場所の隣に口述文が置かれ、次の ⌘V で意図しない場所へ貼られる。
         // 結果は履歴に残り、HUD からコピーもできるので失われはしない。
-        if let reason = FocusSnapshot.secureInputReason() {
+        if let reason = environment.secureInputReason() {
             return .failed(reason: reason, hint: .secureInput)
         }
 
-        let before = FocusSnapshot.capture()
-
-        let pasteboard = NSPasteboard.general
         // **全 type** を退避する。プレーンテキストだけを覚えていると、スクショ・ファイル・
         // 書式付きテキストを戻せず、復元のつもりでクリップボードを空にする（Issue #79）。
-        let previous = PasteboardSnapshot.capture(pasteboard)
+        let previous = PasteboardSnapshot.capture(environment.pasteboard)
+        // 自分が書いた変化を changeCount で覚える。復元の直前に比べて、その間に
+        // **ユーザーが**コピーした分は踏み潰さない（Issue #63 の抑止を Issue #79 で作り直したもの）。
         let writtenChangeCount = write(text, purpose: .injection)
-        // 自分が書いた変化を「録音直前のコピー」と誤認しないようにする。時間ではなく
-        // changeCount で外すので、この直後に**ユーザーが**コピーした分は取りこぼさない
-        // （Issue #63 の抑止を Issue #79 で作り直したもの）。
 
-        postPaste()
-
-        let outcome = await verifyAfterSettle(text: text, before: before)
+        let outcome = await environment.deliver(text)
 
         // **クリップボードに残すのは「本当に失敗した」ときだけ**（Issue #143）。
         //
         // 以前は「成功と確認できたとき以外」は残していたが、主戦場のターミナルは
-        // Accessibility が文字数も caret も返さないので `verifyAfterSettle` は必ず
-        // `.uncertain` になる。実測 411 件のうち `.succeeded` は 2 件で、**99.5% が
-        // 復元されない経路を通っていた**——つまり口述のたびに直前のコピーが失われ、
-        // 発話内容がクリップボードに残り続けていた（Issue #79 の復元が一度も走らない）。
+        // Accessibility が文字数も caret も返さないので判定は必ず `.uncertain` になる。
+        // 実測 411 件のうち `.succeeded` は 2 件で、**99.5% が復元されない経路を通っていた**
+        // ——つまり口述のたびに直前のコピーが失われ、発話内容がクリップボードに残り続けていた。
         //
         // `.uncertain` は「送出は済んだ・確認手段が無いだけ」なので、貼れている可能性の方が
-        // 高い。結果は履歴に必ず残る（Issue #13 の懸念は履歴が無かった当時のもの）ので、
-        // クリップボードは戻す方が損が小さい。
+        // 高い。結果は履歴に必ず残るので、クリップボードは戻す方が損が小さい。
         if !outcome.isFailure || !keepResult {
             scheduleClipboardRestore(previous: previous, writtenChangeCount: writtenChangeCount)
         }
@@ -187,18 +222,6 @@ enum TextInjector {
     }
 
     // MARK: - クリップボード
-
-    /// 口述テキストをクリップボードへ置く。**HUD と履歴の「コピー」はここを通す。**
-    ///
-    /// 経路を 1 つに寄せることで、機密の目印の付け方が漏れないようにする。
-    /// 以前は HUD と履歴が `NSPasteboard` を直接叩いていた（Issue #79）。
-    ///
-    /// **`Concealed` だけを立てる。** ユーザーが自分の意思でコピーしたものなので、
-    /// クリップボードマネージャの履歴には**残ってよい**（残らないと「さっきコピーしたのに
-    /// 履歴に無い」になる）。伏字扱いにするかは各マネージャの判断に任せる。
-    static func copyToPasteboard(_ text: String) {
-        _ = write(text, purpose: .userCopy)
-    }
 
     /// クリップボードに置く目的。**立てる目印が変わる**（Issue #105）。
     private enum WritePurpose {
@@ -222,8 +245,8 @@ enum TextInjector {
     /// 挿入用は 3 つとも立てて `source` に自分の bundle ID を入れる。`Concealed` だけだと
     /// 「記録はする」マネージャに残ってしまい、目的（残さない）を果たせない。
     @discardableResult
-    private static func write(_ text: String, purpose: WritePurpose) -> Int {
-        let pasteboard = NSPasteboard.general
+    private func write(_ text: String, purpose: WritePurpose) -> Int {
+        let pasteboard = environment.pasteboard
         pasteboard.clearContents()
         let item = NSPasteboardItem()
         item.setString(text, forType: .string)
@@ -239,30 +262,64 @@ enum TextInjector {
 
     /// 復元待ちのスナップショット。終了・クラッシュで口述テキストをクリップボードに
     /// 置き去りにしないため、`restorePendingClipboard()` から同期的に戻せるよう控えておく。
-    private static var pendingRestore: (snapshot: PasteboardSnapshot, changeCount: Int)?
+    private var pendingRestore: (snapshot: PasteboardSnapshot, changeCount: Int)?
 
     /// 復元までの間に他アプリ/ユーザーがクリップボードを書き換えていたら
     /// （changeCount が変化）、その内容を踏み潰さないよう復元しない。
-    private static func scheduleClipboardRestore(previous: PasteboardSnapshot, writtenChangeCount: Int) {
+    private func scheduleClipboardRestore(previous: PasteboardSnapshot, writtenChangeCount: Int) {
         pendingRestore = (previous, writtenChangeCount)
+        let delay = environment.restoreDelay
         Task { @MainActor in
-            try? await Task.sleep(for: restoreDelay)
+            try? await Task.sleep(for: delay)
             restoreClipboard(previous, writtenChangeCount: writtenChangeCount)
         }
     }
 
-    /// アプリ終了時の取りこぼしを防ぐ。復元待ちが残っていれば同期的に戻す（Issue #79）。
-    static func restorePendingClipboard() {
+    private func restorePendingClipboard() {
         guard let pending = pendingRestore else { return }
         restoreClipboard(pending.snapshot, writtenChangeCount: pending.changeCount)
     }
 
-    private static func restoreClipboard(_ snapshot: PasteboardSnapshot, writtenChangeCount: Int) {
+    private func restoreClipboard(_ snapshot: PasteboardSnapshot, writtenChangeCount: Int) {
         pendingRestore = nil
-        let pasteboard = NSPasteboard.general
+        let pasteboard = environment.pasteboard
         guard pasteboard.changeCount == writtenChangeCount else { return }
         snapshot.restore(to: pasteboard)
-        // 復元も自分が起こした変化なので、次の録音のコンテキストに混ぜない。
+    }
+}
+
+// MARK: - 本物の環境
+
+extension TextInjector.Environment {
+    /// アプリが使う本物。`NSPasteboard.general`・AX・CGEvent に触れる。
+    static var live: TextInjector.Environment {
+        TextInjector.Environment(
+            pasteboard: .general,
+            frontmostBundleId: {
+                guard let app = NSWorkspace.shared.frontmostApplication,
+                      app.bundleIdentifier != Bundle.main.bundleIdentifier
+                else { return nil }
+                return app.bundleIdentifier
+            },
+            isAccessibilityTrusted: { AXIsProcessTrusted() },
+            secureInputReason: { FocusSnapshot.secureInputReason() },
+            deliver: { text in await LivePaste.deliver(text) },
+            keepResultOnFailure: { SettingsStore.shared.keepResultOnClipboardWhenUnsure },
+            restoreDelay: .milliseconds(250)
+        )
+    }
+}
+
+/// 本物の ⌘V 送出と、挿入先の変化による成否判定。
+@MainActor
+private enum LivePaste {
+    /// ペーストが挿入先に反映されるのを待つ時間。
+    private static let settleDelay: Duration = .milliseconds(350)
+
+    static func deliver(_ text: String) async -> InsertionOutcome {
+        let before = FocusSnapshot.capture()
+        postPaste()
+        return await verifyAfterSettle(text: text, before: before)
     }
 
     // MARK: - イベント送出
