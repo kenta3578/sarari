@@ -85,8 +85,6 @@ final class TextInjector {
     /// 挿入が触る外の世界。
     struct Environment {
         var pasteboard: NSPasteboard
-        /// 最前面アプリのバンドル ID（自分自身は nil）。
-        var frontmostBundleId: @MainActor () -> String?
         var isAccessibilityTrusted: @MainActor () -> Bool
         /// 挿入してはいけない状態ならその理由（パスワード欄・Secure Keyboard Entry）。
         var secureInputReason: @MainActor () -> String?
@@ -106,20 +104,12 @@ final class TextInjector {
 
     // MARK: - 入口（static）
 
-    /// - Parameter expectedBundleId: 録音を始めたときに前面だったアプリ。渡すと、挿入直前に
-    ///   前面が変わっていないかを照合する。nil なら照合しない（HUD・履歴からの再挿入）。
-    static func insert(_ text: String, expectedBundleId: String? = nil) async -> InsertionOutcome {
-        await shared.insert(text, expectedBundleId: expectedBundleId)
+    /// 貼るときにフォーカスのある場所へ入れる。挿入先の照合はしない（Issue #116。
+    /// 録音を始めた場所と別の所へ移ってから止め、そこへ入れる使い方があるため）。
+    static func insert(_ text: String) async -> InsertionOutcome {
+        await shared.insert(text)
     }
 
-    /// 最前面アプリのバンドル ID。**自分自身は除く**（HUD は `.nonactivatingPanel` なので
-    /// 通常は前面に出ないが、設定ウィンドウを開いていると自分が前面になりうる）。
-    ///
-    /// 録音開始時にこれを控え、挿入直前に同じ値かを見る（Issue #80）。**取る側と比べる側を
-    /// 同じ場所に置く**ことで、片方だけ条件が変わる事故を防ぐ。
-    static func frontmostBundleId() -> String? {
-        shared.environment.frontmostBundleId()
-    }
 
     /// 口述テキストをクリップボードへ置く。**HUD と履歴の「コピー」はここを通す。**
     ///
@@ -157,11 +147,11 @@ final class TextInjector {
         let restore: Task<Void, Never>?
     }
 
-    func insert(_ text: String, expectedBundleId: String? = nil) async -> InsertionOutcome {
+    func insert(_ text: String) async -> InsertionOutcome {
         let previous = lastInsertion
         let current = Task { @MainActor in
             await previous?.value
-            return await performInsert(text, expectedBundleId: expectedBundleId)
+            return await performInsert(text)
         }
         lastInsertion = Task { await current.value.restore?.value }
         return await current.value.outcome
@@ -172,24 +162,10 @@ final class TextInjector {
         await lastInsertion?.value
     }
 
-    private func performInsert(_ text: String, expectedBundleId: String?) async -> Attempt {
+    private func performInsert(_ text: String) async -> Attempt {
         guard !text.isEmpty else { return Attempt(outcome: .succeeded, restore: nil) }
 
         let keepResult = environment.keepResultOnFailure()
-
-        // 録音を始めたアプリと違うところへ貼らない（Issue #80）。
-        //
-        // 文字起こしと整形に数秒かかる間にアプリを切り替えると、⌘V はその時点の前面へ飛ぶ。
-        // しかも before / after は両方その新しい要素なので `CFEqual` が一致し、文字数も
-        // 増えるので **「成功」と判定されて誤爆が検知されなかった**。
-        if let expectedBundleId,
-           let current = environment.frontmostBundleId(),
-           current != expectedBundleId {
-            if keepResult {
-                write(text, purpose: .injection)
-            }
-            return Attempt(outcome: .failed(reason: "録音したアプリが前面にないため挿入しませんでした"), restore: nil)
-        }
 
         guard environment.isAccessibilityTrusted() else {
             // CGEvent の送出自体ができない。結果だけでも拾えるようにしてから返す。
@@ -321,12 +297,6 @@ extension TextInjector.Environment {
     static var live: TextInjector.Environment {
         TextInjector.Environment(
             pasteboard: .general,
-            frontmostBundleId: {
-                guard let app = NSWorkspace.shared.frontmostApplication,
-                      app.bundleIdentifier != Bundle.main.bundleIdentifier
-                else { return nil }
-                return app.bundleIdentifier
-            },
             isAccessibilityTrusted: { AXIsProcessTrusted() },
             secureInputReason: { FocusSnapshot.secureInputReason() },
             deliver: { text in await LivePaste.deliver(text) },
