@@ -324,7 +324,10 @@ extension TextInjector.Environment {
                 guard let app = NSWorkspace.shared.frontmostApplication,
                       app.bundleIdentifier != Bundle.main.bundleIdentifier
                 else { return InsertionTarget(bundleId: nil) }
-                return InsertionTarget(bundleId: app.bundleIdentifier)
+                let focus = FocusSnapshot.focus(of: app.processIdentifier)
+                return InsertionTarget(bundleId: app.bundleIdentifier,
+                                       window: focus.window,
+                                       element: focus.element)
             },
             isAccessibilityTrusted: { AXIsProcessTrusted() },
             secureInputReason: { FocusSnapshot.secureInputReason() },
@@ -519,6 +522,17 @@ private struct FocusSnapshot {
                              characterCount: count,
                              caret: caret,
                              selectionLength: selectionLength)
+    }
+
+    /// そのアプリの前面の窓と、フォーカスのある要素。読めなければ nil（Issue #107）。
+    ///
+    /// 権限が無い・応答しないアプリでは nil になる。比べる側（`InsertionTarget.mismatchReason`）は
+    /// 読めたものだけを比べるので、nil でも挿入は止まらない。
+    @MainActor
+    static func focus(of pid: pid_t) -> (window: AXUIElement?, element: AXUIElement?) {
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, timeout)
+        return (element(app, kAXFocusedWindowAttribute), element(app, kAXFocusedUIElementAttribute))
     }
 
     /// 挿入してはいけない状態なら、その理由。挿入してよいなら nil。

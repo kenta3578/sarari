@@ -197,8 +197,6 @@ final class AppController {
         guard state.status.canStartRecording else { return }
         let generation = guardState.begin()
         do {
-            // 挿入先は録音開始の**前**に控える。NSWorkspace だけなので AX 権限も要らず軽い。
-            pendingTarget = TextInjector.currentTarget()
             // 開始音より前に止める（音楽が入らないうちに録音を始めるため）。
             mediaPauser.pauseIfPlaying()
 
@@ -211,6 +209,10 @@ final class AppController {
             // 起動音はマイクが録っている最中に鳴る。その分を棒に見せない（Issue #186）。
             // 録音・文字起こしには触らない。
             hud.ignoreLevels(forSoundOf: SoundPlayer.play(start))
+            // 挿入先（前面アプリ・窓・入力欄）を控える（Issue #80 / #107）。窓と入力欄は AX の
+            // 同期 IPC（1 回 0.25 秒で打ち切り）なので、録音と開始音を始めた**あと**に取る。
+            // 先に取ると、応答の遅いアプリで出だしの声が録れない。
+            pendingTarget = TextInjector.currentTarget()
         } catch {
             mediaPauser.resumeIfPaused()
             state.update(.failed(reason: "録音開始失敗: \(error.localizedDescription)"))
