@@ -171,7 +171,11 @@ final class AppController {
         } catch {
             // WhisperKit の modelsUnavailable は生のまま出すと「Model file not found at
             // .../MelSpectrogram.mlmodelc」で、何をすればいいか分からない（Issue #83）。
-            let reason = isDownloading
+            // 照合に落ちたときは取得の直後でもそのまま出す。ネットワークのせいにすると、
+            // 取得元が変わったこと（Issue #106 が検知したいもの）が見えなくなる。
+            let reason = error is ModelIntegrity.VerificationError
+                ? error.localizedDescription
+                : isDownloading
                 ? "音声認識モデルを取得できませんでした（ネットワークと空き容量を確認してください）"
                 : "モデル読込失敗: \(error.localizedDescription)"
             Log.asr.error("音声認識モデルを読み込めませんでした: \(error.localizedDescription)")
