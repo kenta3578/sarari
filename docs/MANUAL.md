@@ -204,6 +204,7 @@ LLM は口述のたびには使いません。使うのは辞書を育てると�
 | 「パスワード欄には入力しません」と出る | 仕様。パスワード欄と Secure Keyboard Entry 中は**送っても届かない**うえ、届くと口述文がパスワード欄に入るので手前で止めている。文章は履歴に残る |
 | 「Secure Keyboard Entry が有効なため…」と出る | どこかのアプリが Secure Keyboard Entry を掴んでいる（Terminal の「セキュリティ保護されたキー入力」など）。そのアプリでオフにする |
 | 起動後ずっと黄の砂時計 | WhisperKit モデルの DL 中。一般 › 音声認識 を Apple に戻せば即座に待機になる |
+| 「モデルの内容が記録と一致しません」「記録に無いファイルがあります」と出る | 取得したモデルが、確かめた版から変わっている。下の「WhisperKit モデル」のフォルダを消して WhisperKit を選び直すと取り直す。それでも出るなら取得元が更新されているので、Apple の音声認識に戻す |
 | 挿入後に黄の「!」 | 録音中に入力デバイスが変わり、切り替え前までの音声で処理した。メニューを開くと理由が読める |
 
 挿入できなかったときは、HUD に文章が残ります。「コピー」でクリップボードに入れるか、入れたい場所をクリックしてから「もう一度挿入」を押します。
@@ -223,4 +224,4 @@ LLM は口述のたびには使いません。使うのは辞書を育てると�
 | 取り込んだ開始音・停止音 | `~/sarari/sounds/` |
 | 履歴（テキスト） | `~/sarari/history/` |
 | 設定値 | `UserDefaults`（`com.kenta3578.koebun`） |
-| WhisperKit モデル | `~/Library/Application Support/com.kenta3578.koebun/huggingface/models/argmaxinc/whisperkit-coreml/` |
+| WhisperKit モデル | `~/Library/Application Support/com.kenta3578.koebun/huggingface/` |

@@ -81,8 +81,9 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 |---|---:|---|
 | `Engines.swift` | 81 | `SpeechEngine` プロトコルと `SpeechEngineKind`（apple / whisperKit）。差し替えの境界 |
 | `AppleTranscriber.swift` | 184 | Apple SpeechAnalyzer（macOS 26 以降・既定・DL 無し） |
-| `Transcriber.swift` | 91 | WhisperKit large-v3-turbo（初回に約 630MB を取得） |
-| `ModelIntegrity.swift` | 132 | WhisperKit の重みが開発時に確かめたものと同じかを SHA-256 で照合 |
+| `Transcriber.swift` | 168 | WhisperKit large-v3-turbo。ファイルが欠けているときだけ取得し（約 630MB）、揃っていれば配布元に問い合わせずに読む |
+| `ModelLoadSequence.swift` | 21 | 取得 → 照合 → 読み込み → 照合 の順番だけを持つ |
+| `ModelIntegrity.swift` | 179 | WhisperKit の重みとトークナイザが開発時に確かめたものと同じかを、読み込むたびに SHA-256 で照合 |
 | `Replacements.swift` | 140 | 辞書置換のルールと `~/sarari/replacements.json` の読み書き |
 | `FillerRemover.swift` | 153 | フィラー語の決定的な除去（`~/sarari/fillers.json`）。語を足さず、数値・URL・英単語には触れない |
 | `JSONFileSync.swift` | 140 | `replacements.json` / `fillers.json` の読み書きと、外での編集の監視・読み直し（外の編集を上書きしない） |

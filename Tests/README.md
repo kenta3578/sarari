@@ -19,7 +19,9 @@ AppKit の実画面・モデル・TCC に依存しない **純 Swift のロジ�
 | `DictationPipelineTests` | 文字起こし → 辞書置換 → フィラー除去 の順序と計時（Issue #66。フェイクのエンジンと固定した時計で） |
 | `InsertionPresentationTests` | 挿入結果 → メニューバー状態と HUD の動き（`.claude/rules/insertion-feedback.md`） |
 | `RecordingLimitTests` | 録音の上限で止めた発話の見せ方（挿入しない・クリップボードを案内しない。Issue #17） |
-| `TranscriberPathTests` | WhisperKit のモデルの保存先（書類フォルダに置かない・HubApi の並びに合わせる。Issue #23） |
+| `TranscriberPathTests` | WhisperKit のモデルの保存先（書類フォルダに置かない・HubApi の並びに合わせる。Issue #23）。照合する組（モデル＋トークナイザ）と、読み込みが照合した場所だけを指し取得しないこと（Issue #106） |
+| `ModelIntegrityTests` | モデルとトークナイザの照合。照合のあとの変化・記録に無いファイルを検出すること（Issue #106。小さな代用ファイルで） |
+| `ModelLoadSequenceTests` | 取得 → 照合 → 読み込み → 照合 の順。揃っていれば取得しない・照合に落ちたら読み込まない（Issue #106） |
 | `HistoryEntryTests` | `meta.json` の互換。**整形系の列を持つ古い記録が読めること**（#128〜#131 で書く側だけ消した） |
 | `FailureHintTests` | 失敗の手がかりの契約（ボタンを出す／出さない・状態まで運ばれるか） |
 | `ResultRetentionTests` | 挿入できなかった結果の残し先。履歴が必ず含まれること・保存値の綴り |
