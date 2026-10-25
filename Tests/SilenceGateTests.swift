@@ -149,8 +149,8 @@ struct SilenceGateTests {
     @Test("50ms の区切りをまたいだ短い音 1 つは無音として扱う")
     func clickAcrossWindowBoundaryIsSilence() async throws {
         let engine = SpyEngine()
-        // 790 サンプル目から 20ms。窓 0 と窓 1 の両方に掛かる。
-        let samples = [Float](repeating: 0, count: 790)
+        // 640 サンプル目から 20ms（320 サンプル）。窓 0 と窓 1 に半分ずつ掛かり、どちらも声の大きさを超える。
+        let samples = [Float](repeating: 0, count: 640)
             + SignalFixtures.tone(seconds: 0.02, amplitude: 0.3)
             + SignalFixtures.silence(seconds: 1)
         _ = try await run(samples, engine: engine)
