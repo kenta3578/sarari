@@ -50,6 +50,11 @@ struct RecordingHUDView: View {
             cancelConfirmation
         } else if case .failed(let reason, let hint) = model.status {
             failedContent(reason, hint: hint)
+        } else if case .loadingModel(let step) = model.status {
+            // 読み込み中に録音キーを押したとき（Issue #123）。読み込みが終われば閉じる。
+            resultHeader(isFailure: false, title: step, detail: nil,
+                         hint: nil, onDismiss: onDismiss)
+                .padding(.vertical, 2)
         } else {
             // 「通常」表示は Issue #6 で削除した。結果・確認・失敗以外はすべて細いバー。
             minimalContent

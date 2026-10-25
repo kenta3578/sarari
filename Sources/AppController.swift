@@ -17,6 +17,12 @@ final class AppController {
     private let mediaPauser = MediaPauser()
     private let state = AppState.shared
 
+    /// 音声認識モデルの読み込みに失敗したときの状態。読み込み直して成功するまで持つ（Issue #123）。
+    /// 表示（`state.status`）は権限の失敗などで上書きされるので、録音を始めるかの判定はこちらを見る。
+    private var modelFailure: AppStatus?
+    /// 音声認識モデルを読み込んでいる最中か。権限が付いたときに読み込み中の表示を消さないため。
+    private var isLoadingModel = false
+
     /// アクセシビリティ権限が付くのを見張るタイマー（Issue #78）。許可を検知したら止める。
     private var accessibilityTimer: Timer?
 
@@ -145,7 +151,9 @@ final class AppController {
         }
 
         guard let (kind, engine) = resolveSpeechEngine() else {
-            state.update(.failed(reason: "Apple 音声認識には \(EngineSupport.requiresMacOS26)"))
+            let status = AppStatus.failed(reason: "Apple 音声認識には \(EngineSupport.requiresMacOS26)")
+            modelFailure = status
+            state.update(status)
             return
         }
 
@@ -158,13 +166,16 @@ final class AppController {
                 : "音声認識モデルを読み込み中…"
         ))
 
+        isLoadingModel = true
+        defer { isLoadingModel = false }
+
         // 選ばれなかった方を降ろす（WhisperKit ならモデルぶんのメモリが返る）。
         if kind != .whisperKit { await whisperTranscriber.unload() }
         if kind != .apple, let appleTranscriber { await appleTranscriber.unload() }
 
         do {
             try await engine.load()
-            state.update(.idle)
+            modelFailure = nil
         } catch {
             // WhisperKit の modelsUnavailable は生のまま出すと「Model file not found at
             // .../MelSpectrogram.mlmodelc」で、何をすればいいか分からない（Issue #83）。
@@ -176,7 +187,7 @@ final class AppController {
                 ? "音声認識モデルを取得できませんでした（ネットワークと空き容量を確認してください）"
                 : "モデル読込失敗: \(error.localizedDescription)"
             Log.asr.error("音声認識モデルを読み込めませんでした: \(error.localizedDescription)")
-            state.update(.failed(reason: reason))
+            modelFailure = .failed(reason: reason)
         }
     }
 
@@ -191,7 +202,18 @@ final class AppController {
     private func startRecording() {
         // 読込中は始めない。処理中は始めてよい（Issue #97）。先行パイプラインの完了処理が
         // この録音の状態・HUD を潰さないことは、世代番号で守る（Issue #57 H3 の再来を防ぐ）。
-        guard state.status.canStartRecording else { return }
+        guard !state.isRecording else { return }
+        switch RecordingReadiness.decide(status: state.status,
+                                         modelFailure: modelFailure,
+                                         microphone: PermissionsManager.microphoneAccess) {
+        case .start:
+            break
+        case .notReady(let status):
+            // 黙って無視しない。理由を HUD に出す（Issue #123）。
+            state.update(status)
+            hud.presentStatus()
+            return
+        }
         let generation = guardState.begin()
         do {
             // 開始音より前に止める（音楽が入らないうちに録音を始めるため）。
@@ -397,8 +419,14 @@ final class AppController {
             showDeferred(deferred)
             return
         }
+        // 読み込み中に押されて出した HUD は、ここで閉じる。失敗は表示に残す
+        // （以前は失敗を出した直後に待機で上書きしていた。Issue #123）。
         hud.hide()
-        state.update(.idle)
+        if let status = RecordingReadiness.restingStatus(
+            modelFailure: modelFailure,
+            accessibilityTrusted: PermissionsManager.isAccessibilityTrusted) {
+            state.update(status)
+        }
     }
 
     /// アクセシビリティ権限の状態を UI に反映し、未許可なら許可されるまで見張る。
@@ -412,10 +440,7 @@ final class AppController {
             return
         }
 
-        state.update(.failed(
-            reason: "アクセシビリティ権限がありません（右⌥ が効きません）",
-            hint: .accessibilityPermission
-        ))
+        state.update(RecordingReadiness.accessibilityMissing)
 
         guard accessibilityTimer == nil else { return }
         let timer = Timer(timeInterval: 2, repeats: true) { _ in
@@ -433,7 +458,11 @@ final class AppController {
         accessibilityTimer?.invalidate()
         accessibilityTimer = nil
         hotkeys.start()
-        state.update(.idle)
+        // モデルの失敗を待機で上書きしない（Issue #123）。
+        if let status = RecordingReadiness.restingStatus(
+            modelFailure: modelFailure, accessibilityTrusted: true, isLoadingModel: isLoadingModel) {
+            state.update(status)
+        }
         Log.hotkey.notice("アクセシビリティ権限を検知したのでホットキーを登録し直しました")
     }
 
