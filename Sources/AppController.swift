@@ -17,11 +17,11 @@ final class AppController {
     private let mediaPauser = MediaPauser()
     private let state = AppState.shared
 
-    /// 音声認識モデルの読み込みに失敗したときの状態。読み込み直して成功するまで持つ（Issue #123）。
-    /// 表示（`state.status`）は権限の失敗などで上書きされるので、録音を始めるかの判定はこちらを見る。
-    private var modelFailure: AppStatus?
-    /// 音声認識モデルを読み込んでいる最中か。権限が付いたときに読み込み中の表示を消さないため。
-    private var isLoadingModel = false
+    /// 音声認識モデルの状態（Issue #123）。**読み込み中・失敗の判定はここだけを見る。**
+    /// 表示（`state.status`）は結果パネルを閉じる等で待機に上書きされるので使わない。
+    private var model: ModelReadiness = .loading(.loadingModel(step: "権限を確認中…"))
+    /// 読み込みの世代。追い越された読み込みの結果を捨てる。
+    private var modelLoads = ModelLoads()
     /// 読み込み中に録音キーを押して、HUD に読み込み中を出しているか。読み込みの終わりで閉じる。
     private var hudShowsLoadingNotice = false
 
@@ -152,32 +152,31 @@ final class AppController {
             return
         }
 
+        let load = modelLoads.begin()
         guard let (kind, engine) = resolveSpeechEngine() else {
-            let status = AppStatus.failed(reason: "Apple 音声認識には \(EngineSupport.requiresMacOS26)")
-            modelFailure = status
-            state.update(status)
+            finishLoading(.failed(.failed(reason: "Apple 音声認識には \(EngineSupport.requiresMacOS26)")))
             return
         }
 
         // WhisperKit は初回に約630MB を取りに行く。「読み込み中」とだけ出すと
         // 回線次第で数十分固まったように見える（Issue #83）。
         let isDownloading = kind == .whisperKit && !Transcriber.hasCachedModel
-        state.update(.loadingModel(
+        let loading = AppStatus.loadingModel(
             step: isDownloading
                 ? "音声認識モデルをダウンロード中…（約630MB）"
                 : "音声認識モデルを読み込み中…"
-        ))
-
-        isLoadingModel = true
-        defer { isLoadingModel = false }
+        )
+        model = .loading(loading)
+        state.update(loading)
 
         // 選ばれなかった方を降ろす（WhisperKit ならモデルぶんのメモリが返る）。
         if kind != .whisperKit { await whisperTranscriber.unload() }
         if kind != .apple, let appleTranscriber { await appleTranscriber.unload() }
 
+        let result: ModelReadiness
         do {
             try await engine.load()
-            modelFailure = nil
+            result = .ready
         } catch {
             // WhisperKit の modelsUnavailable は生のまま出すと「Model file not found at
             // .../MelSpectrogram.mlmodelc」で、何をすればいいか分からない（Issue #83）。
@@ -189,18 +188,26 @@ final class AppController {
                 ? "音声認識モデルを取得できませんでした（ネットワークと空き容量を確認してください）"
                 : "モデル読込失敗: \(error.localizedDescription)"
             Log.asr.error("音声認識モデルを読み込めませんでした: \(error.localizedDescription)")
-            modelFailure = .failed(reason: reason)
+            result = .failed(.failed(reason: reason))
         }
-        // 読み込み中に録音キーを押して出した HUD は、終わったら閉じる（Issue #123）。
-        if hudShowsLoadingNotice {
-            hudShowsLoadingNotice = false
-            hud.hide()
-        }
-        // 権限が無ければその失敗、モデルが無ければその失敗、揃えば待機。
-        if let status = RecordingReadiness.restingStatus(
-            modelFailure: modelFailure,
-            accessibilityTrusted: PermissionsManager.isAccessibilityTrusted) {
-            state.update(status)
+        // エンジンを続けて切り替えて、後の読み込みに追い越されていたら何もしない。
+        guard modelLoads.isCurrent(load) else { return }
+        finishLoading(result)
+    }
+
+    /// 読み込みを終えた状態を反映する。権限が無ければその失敗、モデルが無ければその失敗、揃えば待機。
+    private func finishLoading(_ result: ModelReadiness) {
+        model = result
+        let end = RecordingReadiness.afterLoad(
+            model: result,
+            accessibilityTrusted: PermissionsManager.isAccessibilityTrusted,
+            noticeShown: hudShowsLoadingNotice)
+        hudShowsLoadingNotice = false
+        state.update(end.status)
+        switch end.hud {
+        case .keep:    break
+        case .hide:    hud.hide()
+        case .present: hud.presentStatus()
         }
     }
 
@@ -216,16 +223,22 @@ final class AppController {
         // 読込中は始めない。処理中は始めてよい（Issue #97）。先行パイプラインの完了処理が
         // この録音の状態・HUD を潰さないことは、世代番号で守る（Issue #57 H3 の再来を防ぐ）。
         guard !state.isRecording else { return }
-        switch RecordingReadiness.decide(status: state.status,
-                                         modelFailure: modelFailure,
+        switch RecordingReadiness.decide(model: model,
+                                         status: state.status,
                                          microphone: PermissionsManager.microphoneAccess) {
         case .start:
             break
         case .notReady(let status):
+            // 前の発話の文字起こし中は、その表示と HUD を潰さない（結果は世代番号で前の発話のものになる）。
+            // ここに来るのは録音中にマイクの権限を外したときだけ。
+            guard state.status != .processing else {
+                Log.audio.notice("文字起こし中にマイクの権限が無いため、録音を始めませんでした")
+                return
+            }
             // 黙って無視しない。理由を HUD に出す（Issue #123）。
             state.update(status)
             hud.presentStatus()
-            if case .loadingModel = status { hudShowsLoadingNotice = true }
+            if case .loading = model { hudShowsLoadingNotice = true }
             return
         }
         let generation = guardState.begin()
@@ -467,8 +480,7 @@ final class AppController {
         accessibilityTimer = nil
         hotkeys.start()
         // モデルの失敗を待機で上書きしない（Issue #123）。
-        if let status = RecordingReadiness.restingStatus(
-            modelFailure: modelFailure, accessibilityTrusted: true, isLoadingModel: isLoadingModel) {
+        if let status = RecordingReadiness.restingStatus(model: model, accessibilityTrusted: true) {
             state.update(status)
         }
         Log.hotkey.notice("アクセシビリティ権限を検知したのでホットキーを登録し直しました")

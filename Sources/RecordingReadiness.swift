@@ -17,6 +17,27 @@ enum MicrophoneAccess: Equatable {
     }
 }
 
+/// 音声認識モデルの状態。**読み込み中かどうかはここだけで決める**（Issue #123）。
+/// 表示状態（`AppStatus`）は結果パネルを閉じる等で待機に上書きされるので、判定に使わない。
+enum ModelReadiness: Equatable {
+    /// 読み込み中。中身はそのとき見せる `.loadingModel`。
+    case loading(AppStatus)
+    case ready
+    /// 読み込みに失敗した。中身はそのとき見せる `.failed`。読み込み直して成功するまで残す。
+    case failed(AppStatus)
+}
+
+/// 読み込みの世代。エンジンを続けて切り替えると前の読み込みが後より先に終わるので、
+/// 追い越された読み込みの結果は捨てる。
+struct ModelLoads {
+    private(set) var generation = 0
+    mutating func begin() -> Int {
+        generation += 1
+        return generation
+    }
+    func isCurrent(_ load: Int) -> Bool { load == generation }
+}
+
 /// 録音を始めてよいか・待機に戻すときに何を見せるか（Issue #123）。
 ///
 /// 起動直後はホットキーがモデルの読み込みを待たずに効く（Issue #78）。そのあいだに押された
@@ -31,16 +52,15 @@ enum RecordingReadiness {
 
     /// 録音キーを押したとき（録音中でないとき）に始めるか。
     ///
-    /// - Parameters:
-    ///   - status: いまの表示状態。
-    ///   - modelFailure: 音声認識モデルの読み込みに失敗したときの状態。表示が別の状態で
-    ///     上書きされていても、モデルが無ければ録っても文字起こしできないので持ち続ける。
-    ///   - microphone: マイクの権限。
-    static func decide(status: AppStatus, modelFailure: AppStatus?, microphone: MicrophoneAccess) -> Decision {
-        // 読み込み中は受け付けない（読み込みは数秒〜数分。その間に話した分を待たせて
-        // 後から文字起こしすると、いつ入るか分からない）。読み込み中と見せる。
-        if case .loadingModel = status { return .notReady(status) }
-        if let modelFailure { return .notReady(modelFailure) }
+    /// 読み込み中は受け付けない（読み込みは数秒〜数分。その間に話した分を待たせて
+    /// 後から文字起こしすると、いつ入るか分からない）。読み込み中と見せる。
+    /// 理由が重なったら直す順に見せる: 読み込み中 → モデルの失敗 → マイクの権限。
+    static func decide(model: ModelReadiness, status: AppStatus, microphone: MicrophoneAccess) -> Decision {
+        switch model {
+        case .loading(let loading): return .notReady(loading)
+        case .failed(let failure):  return .notReady(failure)
+        case .ready:                break
+        }
         if microphone == .denied { return .notReady(microphoneDenied) }
         // 録音中はトグルで止める側なので、ここに来ない。来ても二重に始めない。
         return status.canStartRecording ? .start : .notReady(status)
@@ -55,12 +75,32 @@ enum RecordingReadiness {
         hint: .accessibilityPermission)
 
     /// 読み込みを終えたとき・権限が付いたときに戻す状態。nil なら表示を変えない。
-    /// **アクセシビリティが先**（無いと録音キー自体が効かない）、次にモデルの失敗、揃えば待機。
+    /// **アクセシビリティが先**（無いと録音キー自体が効かない）、次にモデル、揃えば待機。
     /// 読み込み中に権限が付いたときは、読み込み中の表示を残す（終われば読み込み側が戻す）。
-    static func restingStatus(modelFailure: AppStatus?, accessibilityTrusted: Bool,
-                              isLoadingModel: Bool = false) -> AppStatus? {
+    static func restingStatus(model: ModelReadiness, accessibilityTrusted: Bool) -> AppStatus? {
         if !accessibilityTrusted { return accessibilityMissing }
-        if isLoadingModel { return nil }
-        return modelFailure ?? .idle
+        switch model {
+        case .loading:             return nil
+        case .failed(let failure): return failure
+        case .ready:               return .idle
+        }
+    }
+
+    /// 読み込みを終えたときの HUD の扱い。
+    enum HUDAction: Equatable {
+        /// 触れない（読み込み中の HUD を出していない。出ている結果パネルを閉じない）。
+        case keep
+        case hide
+        /// 状態を前面に出す。読み込み中の HUD を出していて失敗したとき——消すと «準備ができた» と読める。
+        case present
+    }
+
+    /// 読み込みを終えたときに見せる状態と HUD の扱い。`model` は読み込み後（`.ready` か `.failed`）。
+    /// `noticeShown` は、読み込み中に録音キーが押されて HUD に読み込み中を出しているか。
+    static func afterLoad(model: ModelReadiness, accessibilityTrusted: Bool,
+                          noticeShown: Bool) -> (status: AppStatus, hud: HUDAction) {
+        let status = restingStatus(model: model, accessibilityTrusted: accessibilityTrusted) ?? .idle
+        guard noticeShown else { return (status, .keep) }
+        return (status, status.isFailed ? .present : .hide)
     }
 }
