@@ -63,6 +63,8 @@
 | <img class="shot light-only" src="./screens/hud-processing.png#gh-light-mode-only" width="280" alt="文字起こし中の HUD。水色の波形で止まる"><img class="shot dark-only" src="./screens/hud-processing-dark.png#gh-dark-mode-only" width="280" alt="文字起こし中の HUD。水色の波形で止まる"> | 文字起こし中。棒が水色の波形の形で止まります |
 | <img class="shot light-only" src="./screens/hud-done.png#gh-light-mode-only" width="280" alt="挿入できた HUD。緑の点"><img class="shot dark-only" src="./screens/hud-done-dark.png#gh-dark-mode-only" width="280" alt="挿入できた HUD。緑の点"> | 挿入できた。棒が緑の点に畳まれて消えます |
 | <img class="shot light-only" src="./screens/hud-silent.png#gh-light-mode-only" width="280" alt="音を拾えていない HUD。オレンジのマイク斜線"><img class="shot dark-only" src="./screens/hud-silent-dark.png#gh-dark-mode-only" width="280" alt="音を拾えていない HUD。オレンジのマイク斜線"> | 録音を始めて 2 秒たっても一度も音を拾えていない。マイクの権限と入力デバイスを確かめます |
+| <img class="shot light-only" src="./screens/hud-loading.png#gh-light-mode-only" width="280" alt="読み込み中の HUD。音声認識モデルを読み込み中"><img class="shot dark-only" src="./screens/hud-loading-dark.png#gh-dark-mode-only" width="280" alt="読み込み中の HUD。音声認識モデルを読み込み中"> | 音声認識モデルの読み込み中に録音キーを押した。録音は始まりません。読み込みが終わると閉じるので、そこから押し直します |
+| <img class="shot light-only" src="./screens/hud-mic-denied.png#gh-light-mode-only" width="280" alt="マイクの権限が無い HUD。設定を開くボタン"><img class="shot dark-only" src="./screens/hud-mic-denied-dark.png#gh-dark-mode-only" width="280" alt="マイクの権限が無い HUD。設定を開くボタン"> | マイクの権限が無い。録音は始まりません。「設定を開く」でマイクの権限を ON にします |
 
 30 秒を超えた録音をキャンセルするときは確認が入ります。
 
@@ -203,7 +205,7 @@ LLM は口述のたびには使いません。使うのは辞書を育てると�
 | 症状 | 見るところ |
 |---|---|
 | 録音キーを押しても何も起きない | アクセシビリティ権限。新しい版に入れ替えた後・ビルドし直した後は、一覧の sarari を「−」で消してからもう一度 ON |
-| 録音は始まるが文字が出ない | マイク権限。HUD の棒がオレンジのマイク斜線になっていたら、音を一度も拾えていない |
+| 録音は始まるが文字が出ない | 入力デバイス。HUD の棒がオレンジのマイク斜線になっていたら、音を一度も拾えていない（マイクの権限が無いときは、録音を始める前に HUD で知らせます） |
 | 文字は出たがカーソル位置に入らない | 挿入先が ⌘V を受け付けていない。文章は履歴と HUD に残っているので、そこからコピーする |
 | 「パスワード欄には入力しません」と出る | 仕様。パスワード欄と Secure Keyboard Entry 中は**送っても届かない**うえ、届くと口述文がパスワード欄に入るので手前で止めている。文章は履歴に残る |
 | 「Secure Keyboard Entry が有効なため…」と出る | どこかのアプリが Secure Keyboard Entry を掴んでいる（Terminal の「セキュリティ保護されたキー入力」など）。そのアプリでオフにする |
