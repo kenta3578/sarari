@@ -3,33 +3,6 @@ import os
 import Testing
 @testable import sarari
 
-/// テスト用の音（16kHz / mono / Float32）。
-enum SignalFixtures {
-    static let sampleRate = 16_000
-
-    /// 220Hz の正弦波。振幅 0.05 で RMS ≒ 0.035（普通の声より少し大きい）。
-    static func tone(seconds: Double, amplitude: Float) -> [Float] {
-        let count = Int(seconds * Double(sampleRate))
-        return (0..<count).map { i in
-            amplitude * Float(sin(2 * Double.pi * 220 * Double(i) / Double(sampleRate)))
-        }
-    }
-
-    static func silence(seconds: Double) -> [Float] {
-        [Float](repeating: 0, count: Int(seconds * Double(sampleRate)))
-    }
-
-    /// 静かな部屋の床ノイズ（±0.001 の一様乱数。-65dB 前後）。種を固定して毎回同じにする。
-    static func roomNoise(seconds: Double) -> [Float] {
-        var state: UInt64 = 0x2545F4914F6CDD1D
-        return (0..<Int(seconds * Double(sampleRate))).map { _ in
-            state = state &* 6364136223846793005 &+ 1442695040888963407
-            let unit = Float(state >> 40) / Float(1 << 24)   // 0…1
-            return (unit * 2 - 1) * 0.001
-        }
-    }
-}
-
 /// 何も話さずに止めたら、エンジンに関わらず何も入れない（Issue #122）。
 /// WhisperKit は無音に「ご視聴ありがとうございました」のような定型文を返すことがあるので、
 /// **エンジンに渡す前に**弾く。
@@ -149,18 +122,49 @@ struct SilenceGateTests {
         #expect(engine.callCount == 1)
     }
 
-    @Test("開始音はエンジンに届かず、声の部分はそのまま届く")
-    func startSoundDoesNotReachEngine() async throws {
+    /// 開始音を消すのは判定のときだけ。エンジンに渡す音から消すと、開始音に重ねて話した声の頭が欠ける。
+    @Test("声があれば、開始音の区間も含めて録音をそのままエンジンに渡す")
+    func recordingReachesEngineUntouched() async throws {
         let engine = SpyEngine(text: "こんにちは")
-        let beep = SignalFixtures.tone(seconds: 0.3, amplitude: 0.2)
-        let voice = SignalFixtures.tone(seconds: 1, amplitude: 0.05)
-        _ = try await run(beep + SignalFixtures.silence(seconds: 0.3) + voice,
-                          engine: engine, leadingSoundSeconds: 0.46)
-
+        let samples = SignalFixtures.tone(seconds: 0.3, amplitude: 0.2)
+            + SignalFixtures.silence(seconds: 0.3)
+            + SignalFixtures.tone(seconds: 1, amplitude: 0.05)
+        _ = try await run(samples, engine: engine, leadingSoundSeconds: 0.46)
         let received = try #require(engine.received.withLock { $0.first })
-        // 開始音（振幅 0.2）は潰すか切り捨てる。声（振幅 0.05）はそれより小さい。
-        #expect(!received.contains { abs($0) > 0.1 })
-        #expect(Array(received.suffix(voice.count)) == voice)
+        #expect(received == samples)
+    }
+
+    @Test("Bluetooth の遅れで開始音が 0.3 秒遅れて入っても、開始音だけなら無音として扱う")
+    func delayedStartSoundIsSilence() async throws {
+        let engine = SpyEngine()
+        // 0.21 秒の開始音が 0.3 秒遅れて入る（判定から外す区間を固定の 0.46 秒にすると末尾がはみ出す）。
+        let samples = SignalFixtures.silence(seconds: 0.3)
+            + SignalFixtures.tone(seconds: 0.21, amplitude: 0.2)
+            + SignalFixtures.silence(seconds: 1.5)
+        _ = try await run(samples, engine: engine,
+                          leadingSoundSeconds: SilenceGate.excludedSeconds(forSoundOf: 0.21))
+        #expect(engine.callCount == 0)
+    }
+
+    @Test("50ms の区切りをまたいだ短い音 1 つは無音として扱う")
+    func clickAcrossWindowBoundaryIsSilence() async throws {
+        let engine = SpyEngine()
+        // 790 サンプル目から 20ms。窓 0 と窓 1 の両方に掛かる。
+        let samples = [Float](repeating: 0, count: 790)
+            + SignalFixtures.tone(seconds: 0.02, amplitude: 0.3)
+            + SignalFixtures.silence(seconds: 1)
+        _ = try await run(samples, engine: engine)
+        #expect(engine.callCount == 0)
+    }
+
+    @Test("離れた短い音 2 つ（キーを 2 回叩いた）は無音として扱う")
+    func separateClicksAreSilence() async throws {
+        let engine = SpyEngine()
+        let click = SignalFixtures.tone(seconds: 0.02, amplitude: 0.3)
+        let samples = SignalFixtures.silence(seconds: 0.5) + click
+            + SignalFixtures.silence(seconds: 1) + click + SignalFixtures.silence(seconds: 0.5)
+        _ = try await run(samples, engine: engine)
+        #expect(engine.callCount == 0)
     }
 
     @Test("無音で返った結果は履歴に残さない")
