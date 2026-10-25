@@ -41,6 +41,9 @@ enum SilenceGate {
 
     /// 先頭 `seconds` を 0 に潰す。開始音はマイクが録っている最中に鳴るので、
     /// その区間を判定にもエンジンにも入れない（長さは変えない）。
+    ///
+    /// 音量だけでは「開始音だけ」と「開始音に重ねて話した声」を見分けられないので、
+    /// 開始音が鳴り終わる前に話し終えて止めた録音は無音として扱われる。開始音の後まで声が続けば渡る。
     static func muteLeading(_ samples: [Float], seconds: TimeInterval) -> [Float] {
         let count = min(samples.count, Int((seconds * Double(sampleRate)).rounded(.up)))
         guard count > 0 else { return samples }
