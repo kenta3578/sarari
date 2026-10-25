@@ -146,6 +146,15 @@ struct SilenceGateTests {
         #expect(engine.callCount == 0)
     }
 
+    /// 長い開始音（システム音や自分の音）を選んでも、外す区間を伸ばしすぎない。
+    /// はみ出した開始音は声として数え、エンジンに渡す（話した側に倒す）。
+    @Test("判定から外す区間は、長い開始音でも 1 秒まで")
+    func excludedSecondsIsCapped() {
+        #expect(SilenceGate.excludedSeconds(forSoundOf: 0) == 0)
+        #expect(SilenceGate.excludedSeconds(forSoundOf: 3) == 1)
+        #expect(SilenceGate.excludedSeconds(forSoundOf: 0.21) < 1)
+    }
+
     @Test("50ms の区切りをまたいだ短い音 1 つは無音として扱う")
     func clickAcrossWindowBoundaryIsSilence() async throws {
         let engine = SpyEngine()
