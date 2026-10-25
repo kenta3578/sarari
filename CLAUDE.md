@@ -61,7 +61,7 @@ Mac（Apple Silicon）で、音声 → 文字起こし → カーソルへ直挿
 1. Issue を立てる（`category:*` / `priority:*` ラベル。本文は 問題 / 解決方針 / 完了条件）
 2. `EnterWorktree`（名前は `issue<N>`）で worktree を切って実装する。`.xcodeproj` は gitignore なので最初に `xcodegen generate`。型チェックは署名なしの Debug ビルド、**PR の前に `xcodebuild test` が通ること**（どちらも下の Commands）
 3. Issue 単位でコミット → PR（`Closes #N`）→ `gh pr merge --merge --delete-branch`
-   - **使う人から見て何かが変わる PR は、同じ PR の中で `docs/MANUAL.md` の該当する節を直し、`docs/changelog.md` の「次の版」に1行足す**（判定はそれだけ。中の作りだけの変更は載せない。見出しが無ければ先頭に作る）。サイト（GitHub Pages）に出るのは main に入ったとき
+   - **使う人から見て何かが変わる PR は、同じ PR の中で `docs/MANUAL.md` の該当する節を直し、`docs/changelog.md` の「次の版」に1行足し、`docs/scenarios.md` の使われ方のシナリオも直す**（判定はそれだけ。中の作りだけの変更は載せない。見出しが無ければ先頭に作る。機能を消したらそれに頼るシナリオを消し、使い方が増えたら足す）。サイト（GitHub Pages）に出るのは main に入ったとき
 4. `ExitWorktree`（remove）→ `git pull --ff-only origin develop`
 5. **`./scripts/install-local.sh`** で実機へ入れて起動する（Release ビルド → `koebun-dev` 署名 → `/Applications` 置換 → 起動）
 6. 実機で確認する。`pgrep -x sarari` で起動を確かめ、UI 変更はスクリーンショットで見る
@@ -75,7 +75,7 @@ Mac（Apple Silicon）で、音声 → 文字起こし → カーソルへ直挿
 
 1. `project.yml` の `MARKETING_VERSION` と `CURRENT_PROJECT_VERSION` を上げ、`docs/changelog.md` の「次の版」を `vX.Y.Z（YYYY-MM-DD）` に改名する（develop への PR）。**同じ PR で `docs/MANUAL.md` を「次の版」の各項目と今の `Sources/` の挙動に突き合わせ、ズレを直す**（各 PR で直す決まりの取りこぼしをここで拾う。CI で自動更新しないのは、公開リポでは Actions のログと bot の PR が誰でも見えるため）
 2. **リリース前の検査を通す**: 手元のレビューのプレイブック「リリース前・初回公開前に通す」の全段（脅威カタログ → 機能別の考慮事項 → `local_docs/threat-model.md`、今の develop をビルドした実物、使われ方のシナリオ、`/r-expose`・`/r-shipped`）。結果は `local_docs/threat-review-vX.Y.Z.md` に置き、未修正の弱点は Issue・PR に書かない。テストにできる行はテストにする
-   - シナリオの置き場: `docs/scenarios.md`（まだ無い。次のリリースで書く）。E2E にするかの基準はプレイブック側にあり、ここには写さない
+   - シナリオの置き場: `docs/scenarios.md`（「自動」は E2E、「手」は今回変わった所に関係するものだけ実機で試す）。E2E にするかの基準はプレイブック側にあり、ここには写さない
    - E2E の走らせ方: まだ無い（作ったらここにコマンドを書く）
 3. develop → main の PR を作ってマージする（`gh pr create --base main --head develop`）
 4. main の先頭にタグを打つ: `git tag -a vX.Y.Z origin/main -m vX.Y.Z && git push origin vX.Y.Z`

@@ -21,6 +21,7 @@ export default defineConfig({
     'SWIFT-NOTES.md',
     'design-rationale.md',
     'engine-benchmark.md',
+    'scenarios.md',
   ],
   rewrites: {
     'MANUAL.md': 'manual.md',
