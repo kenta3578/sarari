@@ -22,6 +22,8 @@ final class AppController {
     private var modelFailure: AppStatus?
     /// 音声認識モデルを読み込んでいる最中か。権限が付いたときに読み込み中の表示を消さないため。
     private var isLoadingModel = false
+    /// 読み込み中に録音キーを押して、HUD に読み込み中を出しているか。読み込みの終わりで閉じる。
+    private var hudShowsLoadingNotice = false
 
     /// アクセシビリティ権限が付くのを見張るタイマー（Issue #78）。許可を検知したら止める。
     private var accessibilityTimer: Timer?
@@ -189,6 +191,17 @@ final class AppController {
             Log.asr.error("音声認識モデルを読み込めませんでした: \(error.localizedDescription)")
             modelFailure = .failed(reason: reason)
         }
+        // 読み込み中に録音キーを押して出した HUD は、終わったら閉じる（Issue #123）。
+        if hudShowsLoadingNotice {
+            hudShowsLoadingNotice = false
+            hud.hide()
+        }
+        // 権限が無ければその失敗、モデルが無ければその失敗、揃えば待機。
+        if let status = RecordingReadiness.restingStatus(
+            modelFailure: modelFailure,
+            accessibilityTrusted: PermissionsManager.isAccessibilityTrusted) {
+            state.update(status)
+        }
     }
 
     private func toggleRecording() {
@@ -212,6 +225,7 @@ final class AppController {
             // 黙って無視しない。理由を HUD に出す（Issue #123）。
             state.update(status)
             hud.presentStatus()
+            if case .loadingModel = status { hudShowsLoadingNotice = true }
             return
         }
         let generation = guardState.begin()
@@ -419,14 +433,8 @@ final class AppController {
             showDeferred(deferred)
             return
         }
-        // 読み込み中に押されて出した HUD は、ここで閉じる。失敗は表示に残す
-        // （以前は失敗を出した直後に待機で上書きしていた。Issue #123）。
         hud.hide()
-        if let status = RecordingReadiness.restingStatus(
-            modelFailure: modelFailure,
-            accessibilityTrusted: PermissionsManager.isAccessibilityTrusted) {
-            state.update(status)
-        }
+        state.update(.idle)
     }
 
     /// アクセシビリティ権限の状態を UI に反映し、未許可なら許可されるまで見張る。
