@@ -38,6 +38,8 @@ final class RecordingHUDController {
     private var statusObserver: AnyCancellable?
 
     var isVisible: Bool { panel?.isVisible == true }
+    /// 挿入できなかった（確認できなかった）結果を出しているか。
+    var isShowingResult: Bool { model.pendingResult != nil }
 
     init() {
         // 状態が変わるとレイアウトも変わりうる（失敗だけは細いバーでなく大きいパネルで出す）。

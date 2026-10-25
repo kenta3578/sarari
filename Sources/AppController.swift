@@ -22,8 +22,10 @@ final class AppController {
     private var model: ModelReadiness = .loading(.loadingModel(step: "権限を確認中…"))
     /// 読み込みの世代。追い越された読み込みの結果を捨てる。
     private var modelLoads = ModelLoads()
-    /// 読み込み中に録音キーを押して、HUD に読み込み中を出しているか。読み込みの終わりで閉じる。
-    private var hudShowsLoadingNotice = false
+    /// 録音キーを押して、始めない理由を HUD に出しているか。読み込みの終わりで閉じる（失敗なら出し直す）。
+    /// 理由を出したままエンジンを切り替えると、読み込み中の表示に変わったあと待機の細いバーで残るため、
+    /// 読み込み中以外の理由（モデルの失敗・マイク権限なし）でも立てる。
+    private var hudShowsReadinessNotice = false
 
     /// アクセシビリティ権限が付くのを見張るタイマー（Issue #78）。許可を検知したら止める。
     private var accessibilityTimer: Timer?
@@ -201,8 +203,8 @@ final class AppController {
         let end = RecordingReadiness.afterLoad(
             model: result,
             accessibilityTrusted: PermissionsManager.isAccessibilityTrusted,
-            noticeShown: hudShowsLoadingNotice)
-        hudShowsLoadingNotice = false
+            noticeShown: hudShowsReadinessNotice)
+        hudShowsReadinessNotice = false
         state.update(end.status)
         switch end.hud {
         case .keep:    break
@@ -228,17 +230,17 @@ final class AppController {
                                          microphone: PermissionsManager.microphoneAccess) {
         case .start:
             break
+        case .notReadyKeepingDisplay:
+            Log.audio.notice("文字起こし中にマイクの権限が無いため、録音を始めませんでした")
+            return
         case .notReady(let status):
-            // 前の発話の文字起こし中は、その表示と HUD を潰さない（結果は世代番号で前の発話のものになる）。
-            // ここに来るのは録音中にマイクの権限を外したときだけ。
-            guard state.status != .processing else {
-                Log.audio.notice("文字起こし中にマイクの権限が無いため、録音を始めませんでした")
-                return
-            }
-            // 黙って無視しない。理由を HUD に出す（Issue #123）。
+            // 黙って無視しない。理由を出す（Issue #123）。
             state.update(status)
+            // 挿入できなかった結果を出しているときは、その結果パネルを潰さない（文章を失わせない）。
+            // 理由はメニューバーに出る。
+            guard !hud.isShowingResult else { return }
             hud.presentStatus()
-            if case .loading = model { hudShowsLoadingNotice = true }
+            hudShowsReadinessNotice = true
             return
         }
         let generation = guardState.begin()

@@ -62,6 +62,13 @@ struct RecordingReadinessTests {
         #expect(decision == .notReady(failure))
     }
 
+    /// 録音中にマイクの権限を外して止めた直後。前の発話の文字起こしの表示と HUD を潰さない。
+    @Test("文字起こし中にマイクの権限が無ければ、始めず表示も変えない")
+    func keepsProcessingDisplayWithoutMicrophone() {
+        #expect(RecordingReadiness.decide(model: .ready, status: .processing, microphone: .denied)
+                == .notReadyKeepingDisplay)
+    }
+
     /// 未決定なら録音を始めた時点で OS が許可を尋ねる。
     @Test("マイクの権限が未決定なら始める")
     func startsWhenMicrophoneUndetermined() {

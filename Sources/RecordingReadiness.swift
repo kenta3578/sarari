@@ -48,6 +48,9 @@ enum RecordingReadiness {
         case start
         /// 始めない。この状態を HUD に出して理由を見せる。
         case notReady(AppStatus)
+        /// 始めないが、表示は変えない。前の発話の文字起こし中で、その表示と HUD を潰さない
+        /// （ここに来るのは録音中にマイクの権限を外したときだけ）。
+        case notReadyKeepingDisplay
     }
 
     /// 録音キーを押したとき（録音中でないとき）に始めるか。
@@ -61,7 +64,9 @@ enum RecordingReadiness {
         case .failed(let failure):  return .notReady(failure)
         case .ready:                break
         }
-        if microphone == .denied { return .notReady(microphoneDenied) }
+        if microphone == .denied {
+            return status == .processing ? .notReadyKeepingDisplay : .notReady(microphoneDenied)
+        }
         // 録音中はトグルで止める側なので、ここに来ない。来ても二重に始めない。
         return status.canStartRecording ? .start : .notReady(status)
     }
@@ -88,15 +93,15 @@ enum RecordingReadiness {
 
     /// 読み込みを終えたときの HUD の扱い。
     enum HUDAction: Equatable {
-        /// 触れない（読み込み中の HUD を出していない。出ている結果パネルを閉じない）。
+        /// 触れない（始めない理由の HUD を出していない。出ている結果パネルを閉じない）。
         case keep
         case hide
-        /// 状態を前面に出す。読み込み中の HUD を出していて失敗したとき——消すと «準備ができた» と読める。
+        /// 状態を前面に出す。理由の HUD を出していて失敗したとき——消すと «準備ができた» と読める。
         case present
     }
 
     /// 読み込みを終えたときに見せる状態と HUD の扱い。`model` は読み込み後（`.ready` か `.failed`）。
-    /// `noticeShown` は、読み込み中に録音キーが押されて HUD に読み込み中を出しているか。
+    /// `noticeShown` は、録音キーが押されて HUD に始めない理由を出しているか。
     static func afterLoad(model: ModelReadiness, accessibilityTrusted: Bool,
                           noticeShown: Bool) -> (status: AppStatus, hud: HUDAction) {
         let status = restingStatus(model: model, accessibilityTrusted: accessibilityTrusted) ?? .idle
