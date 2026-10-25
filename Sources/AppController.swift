@@ -29,6 +29,9 @@ final class AppController {
     private var recordingLimitReached = false
     /// 上限で録音を止めるタスク。停止・破棄のたびに外す（前の録音のタイマーが次の録音を止めないため）。
     private var recordingLimitTask: Task<Void, Never>?
+    /// この録音の先頭で開始音が鳴っている長さ（余裕込み）。マイクが拾った開始音を、
+    /// 無音の判定にも認識にも入れないために使う（Issue #122）。停止処理で読んで 0 に戻す。
+    private var startSoundSeconds: TimeInterval = 0
     /// 追い越しの判定と、見せ損ねた結果の退避（Issue #97 / #100）。
     /// 判定そのものは `PipelineGuard` に閉じていて、AppKit 無しで単体テストできる（Issue #102）。
     private var guardState = PipelineGuard()
@@ -200,9 +203,12 @@ final class AppController {
             // 表示サイズ（非表示/最小/通常）の判断は HUD 側に一本化してある。
             hud.show()
             let start = SettingsStore.shared.startSound
-            // 起動音はマイクが録っている最中に鳴る。その分を棒に見せない（Issue #186）。
-            // 録音・文字起こしには触らない。
-            hud.ignoreLevels(forSoundOf: SoundPlayer.play(start))
+            // 起動音はマイクが録っている最中に鳴る。その分を棒に見せず（Issue #186）、
+            // 無音の判定と認識にも入れない（Issue #122）。
+            let soundDuration = SoundPlayer.play(start)
+            hud.ignoreLevels(forSoundOf: soundDuration)
+            startSoundSeconds = soundDuration > 0
+                ? soundDuration + RecordingHUDController.soundLatencyMargin : 0
         } catch {
             mediaPauser.resumeIfPaused()
             state.update(.failed(reason: "録音開始失敗: \(error.localizedDescription)"))
@@ -226,6 +232,8 @@ final class AppController {
         audioDeviceChangedDuringRecording = false
         let limitReached = recordingLimitReached
         recordingLimitReached = false
+        let leadingSound = startSoundSeconds
+        startSoundSeconds = 0
         cancelRecordingLimit()
 
         // **ユーザーが待つ実時間**をここから測る（Issue #107）。履歴の `durations` は
@@ -241,6 +249,7 @@ final class AppController {
                 Log.signposter.endInterval("dictation", signpost)
             }
             await runPipeline(samples: samples,
+                              leadingSoundSeconds: leadingSound,
                               deviceChanged: deviceChanged,
                               limitReached: limitReached,
                               generation: generation,
@@ -253,6 +262,7 @@ final class AppController {
     /// 文字起こしと後処理そのものは `DictationPipeline` に閉じている。ここに残すのは
     /// 「挿入する・見せる・残す」という副作用の側だけ。
     private func runPipeline(samples: [Float],
+                             leadingSoundSeconds: TimeInterval,
                              deviceChanged: Bool,
                              limitReached: Bool,
                              generation: Int,
@@ -269,7 +279,8 @@ final class AppController {
                 samples: samples,
                 engine: speechEngine,
                 rules: ReplacementStore.shared.rules,
-                fillers: SettingsStore.shared.fillerRemovalEnabled ? FillerStore.shared.list : nil
+                fillers: SettingsStore.shared.fillerRemovalEnabled ? FillerStore.shared.list : nil,
+                leadingSoundSeconds: leadingSoundSeconds
             )
         } catch {
             let status = AppStatus.failed(reason: "文字起こし失敗: \(error.localizedDescription)")

@@ -308,6 +308,11 @@ final class HistoryStore: ObservableObject {
     ///   - prompt: 整形 LLM に送ったシステムプロンプト全文（整形が通ったときのみ）。
     ///   - speechEngine: 文字起こしに使ったエンジン（`SpeechEngineKind.rawValue`）。
     ///   - insertion: 挿入結果。挿入する文字が残らなかった発話は nil。
+    /// 無音（文字起こしが何も返さなかった・認識を省いた）は残さない。後から見ても何も分からない（Issue #81 / #122）。
+    nonisolated static func shouldRecord(rawText: String, replacedText: String) -> Bool {
+        !rawText.isEmpty || !replacedText.isEmpty
+    }
+
     func record(
         rawText: String,
         replacedText: String,
@@ -315,8 +320,7 @@ final class HistoryStore: ObservableObject {
         durations: HistoryEntry.Durations,
         insertion: HistoryEntry.Insertion?
     ) {
-        // 無音（文字起こしが何も返さなかった）は残さない。後から見ても何も分からない（Issue #81）。
-        guard !rawText.isEmpty || !replacedText.isEmpty else { return }
+        guard Self.shouldRecord(rawText: rawText, replacedText: replacedText) else { return }
 
         let createdAt = Date()
         var entry = HistoryEntry(
