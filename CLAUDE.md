@@ -76,7 +76,7 @@ Mac（Apple Silicon）で、音声 → 文字起こし → カーソルへ直挿
 1. `project.yml` の `MARKETING_VERSION` と `CURRENT_PROJECT_VERSION` を上げ、`docs/changelog.md` の「次の版」を `vX.Y.Z（YYYY-MM-DD）` に改名する（develop への PR）。**同じ PR で `docs/MANUAL.md` を「次の版」の各項目と今の `Sources/` の挙動に突き合わせ、ズレを直す**（各 PR で直す決まりの取りこぼしをここで拾う。CI で自動更新しないのは、公開リポでは Actions のログと bot の PR が誰でも見えるため）
 2. **リリース前の検査を通す**: 手元のレビューのプレイブック「リリース前・初回公開前に通す」の全段（脅威カタログ → 機能別の考慮事項 → `local_docs/threat-model.md`、今の develop をビルドした実物、使われ方のシナリオ、`/r-expose`・`/r-shipped`）。結果は `local_docs/threat-review-vX.Y.Z.md` に置き、未修正の弱点は Issue・PR に書かない。テストにできる行はテストにする
    - シナリオの置き場: `docs/scenarios.md`（「自動」は E2E、「手」は今回変わった所に関係するものだけ実機で試す）。E2E にするかの基準はプレイブック側にあり、ここには写さない
-   - E2E の走らせ方: まだ無い（作ったらここにコマンドを書く）
+   - E2E の走らせ方: `./scripts/e2e.sh`（S1〜S5 と、Release にテスト用の入口が無いことの確認。挿入先の窓が前面に出るので触らずに待つ。CI には載せない）
 3. develop → main の PR を作ってマージする（`gh pr create --base main --head develop`）
 4. main の先頭にタグを打つ: `git tag -a vX.Y.Z origin/main -m vX.Y.Z && git push origin vX.Y.Z`
 5. タグの push で `release` ワークフローが走り、Releases に `sarari-vX.Y.Z.zip` が付いたことを確かめる（`gh release view vX.Y.Z`）。タグと `MARKETING_VERSION` が違うと止まる
@@ -98,6 +98,7 @@ xcodebuild test -project sarari.xcodeproj -scheme sarari \
   2>&1 | grep -E "✘|Test run|TEST (SUCCEEDED|FAILED)"     # 単体テスト（1秒未満。守備範囲は Tests/README.md）
 ./scripts/install-local.sh                          # 実機へインストールして起動（マージ後に必ず）
 ./scripts/build-release.sh vX.Y.Z                   # 配布用のアドホック署名 zip を build/release/ に作る（CI と同じ物）
+./scripts/e2e.sh                                    # シナリオ S1〜S5 の E2E（読み上げ音声→本物の認識→⌘V。手元のみ。約1分）
 pnpm install && pnpm docs:dev                       # 説明書サイトを手元で見る（docs/ を VitePress で出す。pnpm docs:build でリンク切れ検査）
 pgrep -x sarari                                     # 起動確認
 ./scripts/kpi.sh [--target N]                       # 北極星の KPI（平日の挿入回数）を履歴から集計。目標値は引数で渡す
