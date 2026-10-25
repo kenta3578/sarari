@@ -42,13 +42,16 @@ enum SilenceGate {
     /// 150ms の声は区切りの位置によらず 3 つ続く（端の窓の片方は半分以上埋まる）。
     static let minimumVoicedRun = 3
 
-    /// 開始音の長さに足す余裕。HUD の棒を隠す余裕（0.25 秒）より広い。Bluetooth のヘッドホンでは
-    /// 開始音が 150〜300ms 遅れて鳴るので、その末尾まで判定から外す。
-    static let startSoundMargin: TimeInterval = 0.5
+    /// 開始音の長さに足す余裕。HUD の棒を隠す余裕（0.25 秒）より少し広い。Bluetooth のヘッドホンでは
+    /// 開始音が遅れて鳴るので、その末尾まで判定から外す。
+    static let startSoundMargin: TimeInterval = 0.4
+    /// 判定から外す区間の上限。外すほど「開始音の直後に一言だけ」が無音として捨てられるので、
+    /// 長い開始音を選んでも伸ばしすぎない。はみ出した開始音は声として数える（話した側に倒す）。
+    static let maxExcludedSeconds: TimeInterval = 1
 
     /// 判定から外す先頭の長さ。開始音を鳴らさなかったら 0。
     static func excludedSeconds(forSoundOf duration: TimeInterval) -> TimeInterval {
-        duration > 0 ? duration + startSoundMargin : 0
+        duration > 0 ? min(duration + startSoundMargin, maxExcludedSeconds) : 0
     }
 
     /// 先頭 `seconds`（開始音の区間）を除いて、声とみなせる窓が続いた最長の数。
