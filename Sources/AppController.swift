@@ -564,13 +564,16 @@ extension AppController {
         return model == .ready
     }
 
-    /// 録音を始めて `samples` を話し、止めたのと同じことをする。挿入と履歴の記録まで待って返る。
-    func e2eDictate(samples: [Float]) async {
+    /// 録音を始めて `samples` を話し、止めたのと同じことをする。
+    /// `waitForInsertion` が true なら挿入と履歴の記録まで待って返る。false なら止めた直後に返る
+    /// （前の発話の処理中に次を話す、を再現するため）。
+    func e2eDictate(samples: [Float], waitForInsertion: Bool = true) async {
         Log.asr.notice("\(Self.e2eEntryMarker, privacy: .public)")
         let generation = guardState.begin()
         state.update(.processing)
         launchPipeline(samples: samples, leadingSoundSeconds: 0,
                        deviceChanged: false, limitReached: false, generation: generation)
+        guard waitForInsertion else { return }
         await lastPipeline?.value
     }
 }

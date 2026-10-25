@@ -22,7 +22,7 @@ rm -rf "$home/sarari"
 echo "==> 読み上げ音声を作る"
 speak() { say -v Kyoko --file-format=WAVE --data-format=LEF32@16000 -o "$fixtures/$1.wav" "$2"; }
 speak s1  "えーと、今日はいい天気ですね。"
-speak s2a "最初の文です。"
+speak s2a "最初の文です。少し長めに、ゆっくり話しています。"
 speak s2b "最後の文です。"
 speak s4  "来週、東京に行きます。"
 speak s5  "これはパスワードの欄です。"

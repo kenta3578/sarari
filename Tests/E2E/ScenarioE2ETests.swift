@@ -19,7 +19,8 @@ struct ScenarioE2ETests {
 
     @Test("S1: 話した内容がカーソル位置に入り、フィラーは消えている")
     func s1DictationReachesCursor() async throws {
-        try await E2E.prepare()
+        let clipboard = try await E2E.prepare()
+        defer { clipboard.restore() }
         let host = try await E2EHost.launch(field: .text)
         defer { host.quit() }
 
@@ -32,9 +33,10 @@ struct ScenarioE2ETests {
 
     // MARK: S2 — 続けて口述しても、どの回も入り、クリップボードが元に戻る
 
-    @Test("S2: 続けて口述しても両方入り、終わったあとクリップボードが口述前の内容に戻る")
+    @Test("S2: 続けて口述しても話した順に両方入り、終わったあとクリップボードが口述前の内容に戻る")
     func s2ConsecutiveDictationsRestoreClipboard() async throws {
-        try await E2E.prepare()
+        let clipboard = try await E2E.prepare()
+        defer { clipboard.restore() }
         let original = "E2E: 口述の前にコピーしていた内容"
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(original, forType: .string)
@@ -42,7 +44,9 @@ struct ScenarioE2ETests {
         let host = try await E2EHost.launch(field: .text)
         defer { host.quit() }
 
-        await AppController.shared.e2eDictate(samples: try E2E.speech("s2a"))
+        // 1 回目の文字起こしが終わる前に 2 回目を止める。1 回目を長くして、2 回目の文字起こしが
+        // 先に終わる状況を作る。それでも挿入は話した順でないといけない（Issue #99）。
+        await AppController.shared.e2eDictate(samples: try E2E.speech("s2a"), waitForInsertion: false)
         await AppController.shared.e2eDictate(samples: try E2E.speech("s2b"))
         await TextInjector.shared.waitUntilIdle()
 
@@ -57,7 +61,8 @@ struct ScenarioE2ETests {
 
     @Test("S3: 何も話さずに止めたら、何も入らず履歴にも残らない")
     func s3SilenceInsertsNothing() async throws {
-        try await E2E.prepare()
+        let clipboard = try await E2E.prepare()
+        defer { clipboard.restore() }
         let host = try await E2EHost.launch(field: .text)
         defer { host.quit() }
         let historyBefore = HistoryStore.shared.entries.count
@@ -73,7 +78,8 @@ struct ScenarioE2ETests {
 
     @Test("S4: 辞書置換に登録した語は、置き換えたあとの語で入る")
     func s4ReplacementApplies() async throws {
-        try await E2E.prepare()
+        let clipboard = try await E2E.prepare()
+        defer { clipboard.restore() }
         let saved = ReplacementStore.shared.rules
         ReplacementStore.shared.rules = saved + [ReplacementRule(from: "東京", to: "TOKYO")]
         defer { ReplacementStore.shared.rules = saved }
@@ -92,7 +98,8 @@ struct ScenarioE2ETests {
 
     @Test("S5: パスワード欄には入れず、クリップボードにも残さない。結果は履歴に残る")
     func s5PasswordFieldIsSkipped() async throws {
-        try await E2E.prepare()
+        let clipboard = try await E2E.prepare()
+        defer { clipboard.restore() }
         let original = "E2E: パスワード欄の前のコピー"
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(original, forType: .string)
@@ -127,10 +134,25 @@ enum E2E {
 
     private static var engineLoaded = false
 
+    /// テストの前のクリップボード。E2E は本物のクリップボードを使うので、終わったら全 type を戻す
+    /// （走らせた人がコピーしていた内容を失わせない。テストが途中で落ちても `defer` で戻る）。
+    struct SavedClipboard {
+        let snapshot: PasteboardSnapshot
+        @MainActor func restore() {
+            if snapshot.isEmpty {
+                NSPasteboard.general.clearContents()
+            } else {
+                snapshot.restore(to: .general)
+            }
+        }
+    }
+
     /// 毎回の前提: 前のテストの挿入が終わっている・仮のホーム・アクセシビリティ権限・音声認識エンジン。
-    static func prepare() async throws {
+    /// 戻り値のクリップボードは、テストの終わりに `restore()` で戻す。
+    static func prepare() async throws -> SavedClipboard {
         // 前のテストが予約したクリップボードの復元を済ませる。残っていると、このテストで置いた内容と競る。
         await TextInjector.shared.waitUntilIdle()
+        let saved = SavedClipboard(snapshot: PasteboardSnapshot.capture(.general))
         let realHome = String(cString: getpwuid(getuid())!.pointee.pw_dir)
         let real = URL(fileURLWithPath: realHome).appendingPathComponent(DataDirectory.name).resolvingSymlinksInPath()
         guard DataDirectory.url.resolvingSymlinksInPath() != real else {
@@ -146,6 +168,7 @@ enum E2E {
             }
             engineLoaded = true
         }
+        return saved
     }
 
     /// `scripts/e2e.sh` が `say` で作った 16kHz / mono / Float32 の WAV を読む。
