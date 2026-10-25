@@ -29,14 +29,13 @@ struct TextInjectorClipboardTests {
         func makeInjector() -> TextInjector {
             TextInjector(environment: TextInjector.Environment(
                 pasteboard: pasteboard,
-                frontmostBundleId: { "com.example.editor" },
                 isAccessibilityTrusted: { true },
                 secureInputReason: { nil },
                 deliver: { [self] _ in
                     pasted.append(pasteboard.string(forType: .string))
                     Task { @MainActor [self] in
                         try? await Task.sleep(for: TextInjectorClipboardTests.lateReadDelay)
-                        lateReads.append(pasteboard.string(forType: .string))
+                        self.lateReads.append(self.pasteboard.string(forType: .string))
                     }
                     duringDeliver?()
                     // 本物は 350ms 以上待って判定する。ここでも中断点を挟む。
@@ -64,8 +63,8 @@ struct TextInjectorClipboardTests {
         let injector = h.makeInjector()
         h.copy("元のコピー")
 
-        _ = await injector.insert("1回目", expectedBundleId: "com.example.editor")
-        _ = await injector.insert("2回目", expectedBundleId: "com.example.editor")
+        _ = await injector.insert("1回目")
+        _ = await injector.insert("2回目")
         await injector.waitUntilIdle()
 
         #expect(h.current == "元のコピー")
@@ -75,15 +74,15 @@ struct TextInjectorClipboardTests {
         #expect(h.lateReads == ["1回目", "2回目"])
     }
 
-    @Test("3回続けても、HUD・履歴からの再挿入（照合なし）を混ぜても元に戻る")
+    @Test("3回続けても、HUD・履歴からの再挿入を混ぜても元に戻る")
     func manyInsertionsIncludingReinsertRestoreOriginal() async {
         let h = Harness()
         let injector = h.makeInjector()
         h.copy("元のコピー")
 
-        _ = await injector.insert("口述", expectedBundleId: "com.example.editor")
+        _ = await injector.insert("口述")
         _ = await injector.insert("もう一度挿入")
-        _ = await injector.insert("次の口述", expectedBundleId: "com.example.editor")
+        _ = await injector.insert("次の口述")
         await injector.waitUntilIdle()
 
         #expect(h.current == "元のコピー")
@@ -97,8 +96,8 @@ struct TextInjectorClipboardTests {
         let injector = h.makeInjector()
         h.copy("元のコピー")
 
-        async let first = injector.insert("1回目", expectedBundleId: "com.example.editor")
-        async let second = injector.insert("2回目", expectedBundleId: "com.example.editor")
+        async let first = injector.insert("1回目")
+        async let second = injector.insert("2回目")
         _ = await (first, second)
         await injector.waitUntilIdle()
 
@@ -118,8 +117,8 @@ struct TextInjectorClipboardTests {
             h.copy("あとからのコピー")
         }
 
-        _ = await injector.insert("1回目", expectedBundleId: "com.example.editor")
-        _ = await injector.insert("2回目", expectedBundleId: "com.example.editor")
+        _ = await injector.insert("1回目")
+        _ = await injector.insert("2回目")
         await injector.waitUntilIdle()
 
         #expect(h.current == "あとからのコピー")
@@ -131,8 +130,8 @@ struct TextInjectorClipboardTests {
         let injector = h.makeInjector()
         h.pasteboard.clearContents()
 
-        _ = await injector.insert("1回目", expectedBundleId: "com.example.editor")
-        _ = await injector.insert("2回目", expectedBundleId: "com.example.editor")
+        _ = await injector.insert("1回目")
+        _ = await injector.insert("2回目")
         await injector.waitUntilIdle()
 
         #expect(h.current == nil)
@@ -151,7 +150,7 @@ struct TextInjectorClipboardTests {
             #expect(h.current == "元のコピー")
         }
 
-        _ = await injector.insert("口述", expectedBundleId: "com.example.editor")
+        _ = await injector.insert("口述")
         await injector.waitUntilIdle()
 
         #expect(h.current == "元のコピー")
