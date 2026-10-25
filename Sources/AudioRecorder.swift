@@ -64,9 +64,12 @@ final class AudioRecorder {
 
     private var configurationObserver: NSObjectProtocol?
 
+    /// 録音のサンプルレート（WhisperKit の入力の決まり）。無音の判定もこの値で窓を切る。
+    nonisolated static let sampleRate = 16_000
+
     private let targetFormat = AVAudioFormat(
         commonFormat: .pcmFormatFloat32,
-        sampleRate: 16_000,
+        sampleRate: Double(AudioRecorder.sampleRate),
         channels: 1,
         interleaved: false
     )!

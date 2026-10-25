@@ -32,7 +32,7 @@ enum AudioLevel {
 /// 閾値は普通の声の下端（写した値 0.1 前後）より十分に低く置く。
 enum SilenceGate {
     /// `AudioRecorder` が作る形式（WhisperKit の入力の決まり）。
-    static let sampleRate = 16_000
+    static let sampleRate = AudioRecorder.sampleRate
     /// 判定の窓。HUD の棒と同じ 20fps（50ms）。
     static let windowSamples = sampleRate / 20
     /// 声とみなす窓の音量（写した値）。-47dB、RMS でおよそ 0.0045。
@@ -55,7 +55,8 @@ enum SilenceGate {
     ///
     /// 開始音の区間は**判定から外すだけ**で、エンジンへはそのまま渡す。渡す音から消すと、
     /// 開始音に重ねて話した声の頭が欠ける。音量だけでは「開始音だけ」と「開始音に重ねた声」を
-    /// 見分けられないので、開始音が鳴り終わる前に話し終えて止めた録音は無音として扱われる。
+    /// 見分けられないので、外す区間（開始音の長さ＋`startSoundMargin`）の後ろに声の窓が
+    /// `minimumVoicedRun` 続かない録音（開始音の直後に一言だけ言ってすぐ止めた等）は無音として扱われる。
     static func longestVoicedRun(_ samples: [Float], ignoringLeading seconds: TimeInterval = 0) -> Int {
         let first = min(samples.count, Int((seconds * Double(sampleRate)).rounded(.up)))
         var longest = 0

@@ -1,8 +1,9 @@
 import Foundation
+@testable import sarari
 
 /// テスト用の音（16kHz / mono / Float32）。
 enum SignalFixtures {
-    static let sampleRate = 16_000
+    static let sampleRate = AudioRecorder.sampleRate
 
     /// 220Hz の正弦波。振幅 0.05 で RMS ≒ 0.035（普通の声より少し大きい）。
     static func tone(seconds: Double, amplitude: Float) -> [Float] {
