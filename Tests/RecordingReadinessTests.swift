@@ -134,6 +134,18 @@ struct RecordingReadinessTests {
         #expect(RecordingReadiness.restingStatus(model: .ready, accessibilityTrusted: true) == .idle)
     }
 
+    // MARK: 結果パネルを閉じたとき
+
+    /// 閉じると表示は待機に戻る。モデルが無いのに «待機中» と出ると、押して初めて失敗に気づく。
+    @Test("結果パネルを閉じたら、モデルの失敗・読み込み中・権限の失敗を表示に戻す")
+    func dismissRestoresReadiness() {
+        #expect(RecordingReadiness.statusAfterDismiss(model: .failed(failure), accessibilityTrusted: true) == failure)
+        #expect(RecordingReadiness.statusAfterDismiss(model: .loading(loading), accessibilityTrusted: true) == loading)
+        #expect(RecordingReadiness.statusAfterDismiss(model: .ready, accessibilityTrusted: false)
+                == RecordingReadiness.accessibilityMissing)
+        #expect(RecordingReadiness.statusAfterDismiss(model: .ready, accessibilityTrusted: true) == .idle)
+    }
+
     // MARK: 読み込みが終わったとき
 
     @Test("読み込みが成功したら待機に戻し、読み込み中の HUD は閉じる")
