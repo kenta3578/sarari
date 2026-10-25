@@ -100,7 +100,7 @@ struct DictationPipelineTests {
         }
     }
 
-    @Test("空の認識結果でも落ちず、空のまま返る（無音は呼び出し側で弾く）")
+    @Test("声があっても認識結果が空なら、落ちずに空のまま返る")
     func emptyTranscriptionIsFine() async throws {
         let output = try await DictationPipeline.run(
             samples: Self.speech, engine: FakeEngine(text: ""), rules: [rule], fillers: .default)

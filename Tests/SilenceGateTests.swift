@@ -120,19 +120,47 @@ struct SilenceGateTests {
         #expect(engine.callCount == 1)
     }
 
-    @Test("開始音の区間はエンジンに渡す音から消してある（声の部分はそのまま）")
-    func startSoundIsMutedBeforeEngine() async throws {
+    @Test("無音 3 秒の中に小声 0.3 秒があればエンジンに渡す（録音全体の平均で判定しない）")
+    func quietSpeechInLongSilenceReachesEngine() async throws {
+        let engine = SpyEngine(text: "はい")
+        let samples = SignalFixtures.silence(seconds: 1.5)
+            + SignalFixtures.tone(seconds: 0.3, amplitude: 0.01)
+            + SignalFixtures.silence(seconds: 1.5)
+        _ = try await run(samples, engine: engine)
+        #expect(engine.callCount == 1)
+    }
+
+    @Test("「はい」程度の短い発話（150ms）でもエンジンに渡す")
+    func shortUtteranceReachesEngine() async throws {
+        let engine = SpyEngine(text: "はい")
+        let samples = SignalFixtures.silence(seconds: 1)
+            + SignalFixtures.tone(seconds: 0.15, amplitude: 0.01)
+            + SignalFixtures.silence(seconds: 1)
+        _ = try await run(samples, engine: engine)
+        #expect(engine.callCount == 1)
+    }
+
+    @Test("開始音に重なって話し始めても、後ろに声が続けばエンジンに渡す")
+    func speechOverlappingStartSoundReachesEngine() async throws {
+        let engine = SpyEngine(text: "こんにちは")
+        let samples = SignalFixtures.tone(seconds: 0.3, amplitude: 0.2)
+            + SignalFixtures.tone(seconds: 1, amplitude: 0.05)
+        _ = try await run(samples, engine: engine, leadingSoundSeconds: 0.46)
+        #expect(engine.callCount == 1)
+    }
+
+    @Test("開始音はエンジンに届かず、声の部分はそのまま届く")
+    func startSoundDoesNotReachEngine() async throws {
         let engine = SpyEngine(text: "こんにちは")
         let beep = SignalFixtures.tone(seconds: 0.3, amplitude: 0.2)
-        let gap = SignalFixtures.silence(seconds: 0.3)
         let voice = SignalFixtures.tone(seconds: 1, amplitude: 0.05)
-        _ = try await run(beep + gap + voice, engine: engine, leadingSoundSeconds: 0.46)
+        _ = try await run(beep + SignalFixtures.silence(seconds: 0.3) + voice,
+                          engine: engine, leadingSoundSeconds: 0.46)
 
         let received = try #require(engine.received.withLock { $0.first })
-        #expect(received.count == beep.count + gap.count + voice.count)
-        let muted = Int(0.46 * Double(SignalFixtures.sampleRate))
-        #expect(received[..<muted].allSatisfy { $0 == 0 })
-        #expect(Array(received[(beep.count + gap.count)...]) == voice)
+        // 開始音（振幅 0.2）は潰すか切り捨てる。声（振幅 0.05）はそれより小さい。
+        #expect(!received.contains { abs($0) > 0.1 })
+        #expect(Array(received.suffix(voice.count)) == voice)
     }
 
     @Test("無音で返った結果は履歴に残さない")
