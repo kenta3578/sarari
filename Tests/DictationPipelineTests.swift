@@ -20,6 +20,9 @@ struct DictationPipelineTests {
 
     private struct Boom: Error {}
 
+    /// 話している音の代わり（220Hz・振幅 0.05・1 秒）。無音の判定に掛からない大きさ。
+    static let speech = SignalFixtures.tone(seconds: 1, amplitude: 0.05)
+
     /// 呼ばれるたびに 0ms, 100ms, 250ms … と進む時計。
     private final class FakeClock: @unchecked Sendable {
         private let base = Date(timeIntervalSince1970: 0)
@@ -37,7 +40,7 @@ struct DictationPipelineTests {
     @Test("生テキストは上書きせず、置換後と両方を返す")
     func keepsRawAndReplaced() async throws {
         let output = try await DictationPipeline.run(
-            samples: [],
+            samples: Self.speech,
             engine: FakeEngine(text: "メールはテスト アットマーク example.com です"),
             rules: [rule],
             fillers: nil)
@@ -50,7 +53,7 @@ struct DictationPipelineTests {
     @Test("辞書置換がフィラー除去より先に走る")
     func replacementRunsBeforeFillerRemoval() async throws {
         let output = try await DictationPipeline.run(
-            samples: [],
+            samples: Self.speech,
             engine: FakeEngine(text: "えーと アットマーク を入れて"),
             rules: [rule],
             fillers: .default)
@@ -62,7 +65,7 @@ struct DictationPipelineTests {
     @Test("fillers が nil ならフィラー除去そのものを飛ばす（設定 OFF）")
     func nilFillersSkipsRemoval() async throws {
         let output = try await DictationPipeline.run(
-            samples: [],
+            samples: Self.speech,
             engine: FakeEngine(text: "えーと そうですね"),
             rules: [],
             fillers: nil)
@@ -73,7 +76,7 @@ struct DictationPipelineTests {
     @Test("ルールが空でも素通しする（置換しないだけで落ちない）")
     func emptyRulesPassThrough() async throws {
         let output = try await DictationPipeline.run(
-            samples: [], engine: FakeEngine(text: "そのまま"), rules: [], fillers: nil)
+            samples: Self.speech, engine: FakeEngine(text: "そのまま"), rules: [], fillers: nil)
         #expect(output.replacedText == "そのまま")
     }
 
@@ -82,7 +85,7 @@ struct DictationPipelineTests {
         // now() は transcribeStart → replaceStart → replaceEnd の順に 3 回呼ばれる。
         let clock = FakeClock([0, 0.25, 0.30])
         let output = try await DictationPipeline.run(
-            samples: [], engine: FakeEngine(text: "あ"), rules: [], fillers: nil,
+            samples: Self.speech, engine: FakeEngine(text: "あ"), rules: [], fillers: nil,
             now: clock.now)
 
         #expect(output.durations.transcribeMs == 250)
@@ -93,14 +96,14 @@ struct DictationPipelineTests {
     func transcriptionErrorPropagates() async {
         await #expect(throws: Boom.self) {
             try await DictationPipeline.run(
-                samples: [], engine: FakeEngine(error: Boom()), rules: [], fillers: nil)
+                samples: Self.speech, engine: FakeEngine(error: Boom()), rules: [], fillers: nil)
         }
     }
 
     @Test("空の認識結果でも落ちず、空のまま返る（無音は呼び出し側で弾く）")
     func emptyTranscriptionIsFine() async throws {
         let output = try await DictationPipeline.run(
-            samples: [], engine: FakeEngine(text: ""), rules: [rule], fillers: .default)
+            samples: Self.speech, engine: FakeEngine(text: ""), rules: [rule], fillers: .default)
         #expect(output.rawText.isEmpty)
         #expect(output.replacedText.isEmpty)
     }
