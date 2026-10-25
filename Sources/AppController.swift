@@ -286,6 +286,19 @@ final class AppController {
         startSoundSeconds = 0
         cancelRecordingLimit()
 
+        launchPipeline(samples: samples,
+                       leadingSoundSeconds: leadingSound,
+                       deviceChanged: deviceChanged,
+                       limitReached: limitReached,
+                       generation: generation)
+    }
+
+    /// この発話ぶんのパイプラインを、前の発話の後ろに並べて起動する。**同期のまま呼ぶ**（Issue #99）。
+    private func launchPipeline(samples: [Float],
+                                leadingSoundSeconds leadingSound: TimeInterval,
+                                deviceChanged: Bool,
+                                limitReached: Bool,
+                                generation: Int) {
         // **ユーザーが待つ実時間**をここから測る（Issue #107）。履歴の `durations` は
         // 処理ごとの内訳だが、こちらは挿入の順番待ちも含む「押してから入るまで」。
         let signpost = Log.signposter.beginInterval("dictation", id: Log.signposter.makeSignpostID())
@@ -531,3 +544,31 @@ final class AppController {
         stopRecording()
     }
 }
+
+#if DEBUG
+// MARK: - E2E テストの入口（Issue #126）
+
+/// 録音済みの音声を、録音キーを押して話したのと同じ経路（文字起こし → 挿入 → 表示 → 履歴）に流す。
+///
+/// **`#if DEBUG` の中だけに置く。** 環境変数で開け閉めする入口は出荷版でも外から立てられるので、
+/// Release ビルドには入れない（`scripts/e2e.sh` が Release の実行ファイルに無いことを確かめる）。
+extension AppController {
+    /// Release に入っていないことを確かめるための目印。
+    static let e2eEntryMarker = "SARARI_E2E_ENTRY"
+
+    /// 設定で選ばれている音声認識エンジンを読み込む（テストのホストでは起動処理が走らないため）。
+    func e2eLoadSpeechEngine() async {
+        await reloadSpeechEngine()
+    }
+
+    /// 録音を始めて `samples` を話し、止めたのと同じことをする。挿入と履歴の記録まで待って返る。
+    func e2eDictate(samples: [Float]) async {
+        Log.asr.notice("\(Self.e2eEntryMarker, privacy: .public)")
+        let generation = guardState.begin()
+        state.update(.processing)
+        launchPipeline(samples: samples, leadingSoundSeconds: 0,
+                       deviceChanged: false, limitReached: false, generation: generation)
+        await lastPipeline?.value
+    }
+}
+#endif
