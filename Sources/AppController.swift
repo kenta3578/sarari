@@ -120,7 +120,7 @@ final class AppController {
         }
         hud.onStop = { [weak self] in self?.stopRecording() }
         hud.onCancel = { [weak self] in self?.cancelRecording() }
-        hud.onResultDismissed = { [weak self] in self?.presentNextDeferredIfIdle() }
+        hud.onResultDismissed = { [weak self] in self?.resultDismissed() }
 
         // 整形モデルは WhisperKit の**後**に、録音を待たせずに積む。
         // 数GB のダウンロードが走りうるので、ここを await すると起動が止まる。
@@ -422,6 +422,16 @@ final class AppController {
         } else {
             hud.presentStatus()
         }
+    }
+
+    /// 結果パネル・失敗表示が閉じられた。控えた結果を出し、無ければ準備できていない理由を表示に戻す。
+    private func resultDismissed() {
+        presentNextDeferredIfIdle()
+        // 閉じる操作は表示を待機にする。モデルが無いのに «待機中» と出さない（Issue #123）。
+        guard state.status == .idle else { return }
+        let status = RecordingReadiness.statusAfterDismiss(
+            model: model, accessibilityTrusted: PermissionsManager.isAccessibilityTrusted)
+        if status != .idle { state.update(status) }
     }
 
     /// 結果パネルが閉じられた。控えた結果が残っていれば次を出す（Issue #100）。

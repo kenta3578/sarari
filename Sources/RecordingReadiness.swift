@@ -91,6 +91,13 @@ enum RecordingReadiness {
         }
     }
 
+    /// 結果パネル・失敗表示を閉じて表示が待機に戻ったときに見せる状態。
+    /// 閉じる操作は表示を待機にするので、準備できていなければその理由に戻す。
+    static func statusAfterDismiss(model: ModelReadiness, accessibilityTrusted: Bool) -> AppStatus {
+        if case .loading(let loading) = model, accessibilityTrusted { return loading }
+        return restingStatus(model: model, accessibilityTrusted: accessibilityTrusted) ?? .idle
+    }
+
     /// 読み込みを終えたときの HUD の扱い。
     enum HUDAction: Equatable {
         /// 触れない（始めない理由の HUD を出していない。出ている結果パネルを閉じない）。
