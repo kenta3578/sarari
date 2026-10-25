@@ -46,11 +46,13 @@ AppKit の実画面・モデル・TCC に依存しない **純 Swift のロジ�
 | ファイル | 対象 |
 |---|---|
 | `DocScreenshotsTests` | 説明書サイトの画面画像を描き出す（Issue #56）。`scripts/docs-shots.sh` が書き出し先と仮のホームを渡したときだけ走り、ふだんの `xcodebuild test` では飛ばされる |
+| `E2E/ScenarioE2ETests` | 使われ方のシナリオ S1〜S5 を、読み上げ音声 → 本物の Apple 音声認識 → ⌘V → テスト用の窓（`sarariE2EHost`）まで通す（Issue #126）。`scripts/e2e.sh` が音声の置き場と仮のホームを渡したときだけ走る。アクセシビリティ権限と画面が要るので手元のみ |
 
 ## 置かないもの
 
 - WhisperKit を読み込むもの（約 630MB の DL と数十秒のロード）。要るなら `.disabled` で常時実行から外す
-- TCC ダイアログ・グローバルホットキー・他アプリへの挿入（XCUITest でも権限は自動化できない。実機で手動確認）
+- TCC ダイアログ・グローバルホットキー（XCUITest でも権限は自動化できない。実機で手動確認）
+- 他アプリへの挿入（ふだんのテストには置かない。通しで見るのは上の `E2E/ScenarioE2ETests` だけ）
 - 見た目（`.claude/rules/visual-check.md` の手順でスクリーンショット）
 
 ## 書き方
