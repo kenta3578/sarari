@@ -1,3 +1,4 @@
+import AVFoundation
 import Testing
 @testable import sarari
 
@@ -62,7 +63,48 @@ struct RecordingReadinessTests {
         }
     }
 
+    @Test("録音中に呼ばれても始めない（二重に始めない）")
+    func doesNotStartWhileRecording() {
+        #expect(RecordingReadiness.decide(status: .recording, modelFailure: nil, microphone: .authorized) != .start)
+    }
+
+    /// 手がかり付きの失敗をまとめて止めると、パスワード欄に当たったあとの次の口述が入らない。
+    @Test("パスワード欄で挿入しなかったあとでも、次の録音は始める")
+    func startsAfterSecureInputFailure() {
+        let status = AppStatus.failed(reason: "パスワード欄には入力しません", hint: .secureInput)
+        #expect(RecordingReadiness.decide(status: status, modelFailure: nil, microphone: .authorized) == .start)
+    }
+
+    @Test("失敗のあと別のエンジンを読み込み直している最中は、前の失敗でなく読み込み中を見せる")
+    func loadingWinsOverPreviousModelFailure() {
+        let loading = AppStatus.loadingModel(step: "音声認識モデルを読み込み中…")
+        let decision = RecordingReadiness.decide(status: loading, modelFailure: modelFailure, microphone: .authorized)
+        #expect(decision == .notReady(loading))
+    }
+
+    /// マイクを許可してもモデルが無ければ文字起こしできない。直す順に見せる。
+    @Test("モデルの失敗とマイクの拒否が重なったら、モデルの失敗を先に見せる")
+    func modelFailureWinsOverMicrophone() {
+        let decision = RecordingReadiness.decide(status: .idle, modelFailure: modelFailure, microphone: .denied)
+        #expect(decision == .notReady(modelFailure))
+    }
+
+    @Test("マイクの権限は、許可・未決定以外（拒否・制限）を拒否として扱う")
+    func microphoneAuthorizationMapping() {
+        #expect(MicrophoneAccess(.authorized) == .authorized)
+        #expect(MicrophoneAccess(.notDetermined) == .notDetermined)
+        #expect(MicrophoneAccess(.denied) == .denied)
+        #expect(MicrophoneAccess(.restricted) == .denied)
+    }
+
     // MARK: 待機に戻すとき
+
+    @Test("読み込み中にアクセシビリティが許可されても、読み込み中のまま（待機に戻さない）")
+    func accessibilityGrantDuringLoadingKeepsLoading() {
+        #expect(RecordingReadiness.restingStatus(modelFailure: nil, accessibilityTrusted: true,
+                                                 isLoadingModel: true) == nil)
+    }
+
 
     @Test("アクセシビリティを許可しても、モデルの失敗は消さない")
     func accessibilityGrantKeepsModelFailure() {
@@ -97,5 +139,8 @@ struct RecordingReadinessTests {
     @Test("マイクの権限の手がかりには「設定を開く」ボタンが付く")
     func microphoneHintHasAction() {
         #expect(FailureHint.microphonePermission.actionTitle == "設定を開く")
+        #expect(FailureHint.microphonePermission.privacyPane == .microphone)
+        #expect(FailureHint.accessibilityPermission.privacyPane == .accessibility)
+        #expect(FailureHint.secureInput.privacyPane == nil)
     }
 }
