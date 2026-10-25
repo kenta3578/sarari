@@ -127,8 +127,10 @@ enum E2E {
 
     private static var engineLoaded = false
 
-    /// 毎回の前提: 仮のホーム・アクセシビリティ権限・音声認識エンジン。
+    /// 毎回の前提: 前のテストの挿入が終わっている・仮のホーム・アクセシビリティ権限・音声認識エンジン。
     static func prepare() async throws {
+        // 前のテストが予約したクリップボードの復元を済ませる。残っていると、このテストで置いた内容と競る。
+        await TextInjector.shared.waitUntilIdle()
         let realHome = String(cString: getpwuid(getuid())!.pointee.pw_dir)
         let real = URL(fileURLWithPath: realHome).appendingPathComponent(DataDirectory.name).resolvingSymlinksInPath()
         guard DataDirectory.url.resolvingSymlinksInPath() != real else {
@@ -139,7 +141,9 @@ enum E2E {
                 + "scripts/e2e.sh の案内に従ってシステム設定で許可する")
         }
         if !engineLoaded {
-            await AppController.shared.e2eLoadSpeechEngine()
+            guard await AppController.shared.e2eLoadSpeechEngine() else {
+                throw Precondition(description: "音声認識エンジンを読み込めなかった。ログ（category: asr）を見る")
+            }
             engineLoaded = true
         }
     }

@@ -556,9 +556,12 @@ extension AppController {
     /// Release に入っていないことを確かめるための目印。
     static let e2eEntryMarker = "SARARI_E2E_ENTRY"
 
-    /// 設定で選ばれている音声認識エンジンを読み込む（テストのホストでは起動処理が走らないため）。
-    func e2eLoadSpeechEngine() async {
+    /// 設定で選ばれている音声認識エンジンを読み込み、使える状態になったかを返す
+    /// （テストのホストでは起動処理が走らないため）。`e2eDictate` は録音キーの準備判定を通らないので、
+    /// 読み込みに失敗したまま流すと「何も入らない」としか見えなくなる。
+    func e2eLoadSpeechEngine() async -> Bool {
         await reloadSpeechEngine()
+        return model == .ready
     }
 
     /// 録音を始めて `samples` を話し、止めたのと同じことをする。挿入と履歴の記録まで待って返る。
