@@ -62,6 +62,24 @@ targets:
         # 署名は Xcode で開いた時に各自の Personal Team を割り当てる
         CODE_SIGN_STYLE: Automatic
 
+  # E2E テストの挿入先（Issue #126）。sarari 本体には入らない。テキスト欄とパスワード欄を持ち、
+  # 欄の中身をファイルへ書き出す。sarari と別のプロセスにするのは、挿入先を AX で読むときに
+  # 自分自身へ問い合わせて固まらないため。
+  sarariE2EHost:
+    type: application
+    platform: macOS
+    sources:
+      - path: E2EHost
+    settings:
+      base:
+        PRODUCT_NAME: sarariE2EHost
+        PRODUCT_BUNDLE_IDENTIFIER: com.kenta3578.sarariE2EHost
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        ENABLE_APP_SANDBOX: NO
+        CODE_SIGN_STYLE: Automatic
+
   # 単体テスト（Issue #102）。アプリを TEST_HOST にして同じモジュールとして見る
   # （守備範囲とホスト側の起動抑止は Tests/README.md）。
   # TEST_HOST / BUNDLE_LOADER は xcodegen がアプリ依存から自動で埋める。
@@ -74,6 +92,9 @@ targets:
           - README.md
     dependencies:
       - target: sarari
+      # E2E の挿入先。テストバンドルには埋め込まず、同じ出力先に並べて置く（Issue #126）。
+      - target: sarariE2EHost
+        embed: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kenta3578.koebunTests
@@ -100,6 +121,31 @@ schemes:
         "-hudSize minimal": true
         "-hudPosition bottomCenter": true
         "-edgeGlowEnabled <true/>": true
+        "-resultRetention hud": true
+        "-hotKeyModifierCodes <array><integer>61</integer></array>": true
+        "-hotKeyExtraKeyCode none": true
+        "-historyRetentionDays <integer>30</integer>": true
+        "-fillerRemovalEnabled <true/>": true
+        "-ignoredRuleSuggestions <array/>": true
+        "-speechEngine apple": true
+
+  # E2E テスト（Issue #126。scripts/e2e.sh が使う）。設定値は sarari-docshots と同じ考え方で
+  # 起動引数から渡し、使っている人の保存値を読まない・書かない。
+  sarari-e2e:
+    build:
+      targets:
+        sarari: all
+        sarariTests: [test]
+        sarariE2EHost: [test]
+    test:
+      targets:
+        - sarariTests
+      commandLineArguments:
+        "-startSound なし": true
+        "-stopSound なし": true
+        "-hudSize minimal": true
+        "-hudPosition bottomCenter": true
+        "-edgeGlowEnabled <false/>": true
         "-resultRetention hud": true
         "-hotKeyModifierCodes <array><integer>61</integer></array>": true
         "-hotKeyExtraKeyCode none": true
