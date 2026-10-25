@@ -92,9 +92,8 @@ targets:
           - README.md
     dependencies:
       - target: sarari
-      # E2E の挿入先。テストバンドルには埋め込まず、同じ出力先に並べて置く（Issue #126）。
-      - target: sarariE2EHost
-        embed: false
+    # E2E の挿入先（sarariE2EHost）は依存に入れない。sarari-e2e スキームだけが同じ出力先に並べて作る
+    # （ふだんの `xcodebuild test` と CI で作らない。Issue #126）。
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kenta3578.koebunTests
