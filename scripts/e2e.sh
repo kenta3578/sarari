@@ -61,7 +61,8 @@ xcodebuild -project sarari.xcodeproj -scheme sarari -configuration Release \
 # Debug では本体が sarari.debug.dylib に分かれ、目印はそちらに入る。Release は MacOS/ の全ファイルを見る。
 macos="$root/release-dd/Build/Products/Release/sarari.app/Contents/MacOS"
 [ -f "$macos/sarari" ] || { echo "Release の実行ファイルが見つかりません: $macos" >&2; exit 1; }
-if cat "$macos"/* | strings | grep -qE "SARARI_E2E_ENTRY|e2eDictate|SARARI_E2E_FIXTURES"; then
+# grep -q は使わない。見つけた時点で抜けると strings が SIGPIPE で落ち、pipefail で「無い」と判定される。
+if cat "$macos"/* | strings | grep -E "SARARI_E2E_ENTRY|e2eDictate|SARARI_E2E_FIXTURES" >/dev/null; then
   echo "Release の実行ファイルにテスト用の入口が入っています" >&2
   exit 1
 fi
