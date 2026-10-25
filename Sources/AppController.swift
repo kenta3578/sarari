@@ -30,7 +30,7 @@ final class AppController {
     /// 上限で録音を止めるタスク。停止・破棄のたびに外す（前の録音のタイマーが次の録音を止めないため）。
     private var recordingLimitTask: Task<Void, Never>?
     /// この録音の先頭で開始音が鳴っている長さ（余裕込み）。マイクが拾った開始音を、
-    /// 無音の判定にも認識にも入れないために使う（Issue #122）。停止処理で読んで 0 に戻す。
+    /// 無音の判定に入れないために使う（Issue #122）。停止処理で読んで 0 に戻す。
     private var startSoundSeconds: TimeInterval = 0
     /// 追い越しの判定と、見せ損ねた結果の退避（Issue #97 / #100）。
     /// 判定そのものは `PipelineGuard` に閉じていて、AppKit 無しで単体テストできる（Issue #102）。
@@ -204,11 +204,10 @@ final class AppController {
             hud.show()
             let start = SettingsStore.shared.startSound
             // 起動音はマイクが録っている最中に鳴る。その分を棒に見せず（Issue #186）、
-            // 無音の判定と認識にも入れない（Issue #122）。
+            // 無音の判定にも入れない（Issue #122）。
             let soundDuration = SoundPlayer.play(start)
             hud.ignoreLevels(forSoundOf: soundDuration)
-            startSoundSeconds = soundDuration > 0
-                ? soundDuration + RecordingHUDController.soundLatencyMargin : 0
+            startSoundSeconds = SilenceGate.excludedSeconds(forSoundOf: soundDuration)
         } catch {
             mediaPauser.resumeIfPaused()
             state.update(.failed(reason: "録音開始失敗: \(error.localizedDescription)"))

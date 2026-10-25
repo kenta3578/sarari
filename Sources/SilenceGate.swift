@@ -31,36 +31,44 @@ enum AudioLevel {
 /// 判定は**話した側に倒す**。取り違えて発話を捨てる方が、定型文が入るより悪いので、
 /// 閾値は普通の声の下端（写した値 0.1 前後）より十分に低く置く。
 enum SilenceGate {
+    /// `AudioRecorder` が作る形式（WhisperKit の入力の決まり）。
     static let sampleRate = 16_000
     /// 判定の窓。HUD の棒と同じ 20fps（50ms）。
     static let windowSamples = sampleRate / 20
     /// 声とみなす窓の音量（写した値）。-47dB、RMS でおよそ 0.0045。
     static let voicedLevel: Float = 0.06
-    /// 声とみなす窓がこれだけ（100ms ぶん）あれば話したとみなす。机を叩いた音 1 つでは足りない。
-    static let minimumVoicedWindows = 2
+    /// 声とみなす窓が**続けて**これだけ（150ms）あれば話したとみなす。
+    /// 20ms ほどの机やキーを叩いた音は、窓の区切りをまたいでも続けて 2 つまでにしかならない。
+    /// 150ms の声は区切りの位置によらず 3 つ続く（端の窓の片方は半分以上埋まる）。
+    static let minimumVoicedRun = 3
 
-    /// 先頭 `seconds` を 0 に潰す。開始音はマイクが録っている最中に鳴るので、
-    /// その区間を判定にもエンジンにも入れない（長さは変えない）。
+    /// 開始音の長さに足す余裕。HUD の棒を隠す余裕（0.25 秒）より広い。Bluetooth のヘッドホンでは
+    /// 開始音が 150〜300ms 遅れて鳴るので、その末尾まで判定から外す。
+    static let startSoundMargin: TimeInterval = 0.5
+
+    /// 判定から外す先頭の長さ。開始音を鳴らさなかったら 0。
+    static func excludedSeconds(forSoundOf duration: TimeInterval) -> TimeInterval {
+        duration > 0 ? duration + startSoundMargin : 0
+    }
+
+    /// 先頭 `seconds`（開始音の区間）を除いて、声とみなせる窓が続いた最長の数。
     ///
-    /// 音量だけでは「開始音だけ」と「開始音に重ねて話した声」を見分けられないので、
-    /// 開始音が鳴り終わる前に話し終えて止めた録音は無音として扱われる。開始音の後まで声が続けば渡る。
-    static func muteLeading(_ samples: [Float], seconds: TimeInterval) -> [Float] {
-        let count = min(samples.count, Int((seconds * Double(sampleRate)).rounded(.up)))
-        guard count > 0 else { return samples }
-        var muted = samples
-        muted.replaceSubrange(0..<count, with: repeatElement(0, count: count))
-        return muted
-    }
-
-    /// 声とみなせる窓の数。
-    static func voicedWindows(_ samples: [Float]) -> Int {
-        stride(from: 0, to: samples.count, by: windowSamples).reduce(0) { count, start in
+    /// 開始音の区間は**判定から外すだけ**で、エンジンへはそのまま渡す。渡す音から消すと、
+    /// 開始音に重ねて話した声の頭が欠ける。音量だけでは「開始音だけ」と「開始音に重ねた声」を
+    /// 見分けられないので、開始音が鳴り終わる前に話し終えて止めた録音は無音として扱われる。
+    static func longestVoicedRun(_ samples: [Float], ignoringLeading seconds: TimeInterval = 0) -> Int {
+        let first = min(samples.count, Int((seconds * Double(sampleRate)).rounded(.up)))
+        var longest = 0
+        var current = 0
+        for start in stride(from: first, to: samples.count, by: windowSamples) {
             let window = samples[start..<min(start + windowSamples, samples.count)]
-            return AudioLevel.normalized(rms: AudioLevel.rms(window)) >= voicedLevel ? count + 1 : count
+            if AudioLevel.normalized(rms: AudioLevel.rms(window)) >= voicedLevel {
+                current += 1
+                longest = max(longest, current)
+            } else {
+                current = 0
+            }
         }
-    }
-
-    static func isSilent(_ samples: [Float]) -> Bool {
-        voicedWindows(samples) < minimumVoicedWindows
+        return longest
     }
 }

@@ -299,6 +299,11 @@ final class HistoryStore: ObservableObject {
 
     // MARK: - 記録
 
+    /// 無音（文字起こしが何も返さなかった・認識を省いた）は残さない。後から見ても何も分からない（Issue #81 / #122）。
+    nonisolated static func shouldRecord(rawText: String, replacedText: String) -> Bool {
+        !rawText.isEmpty || !replacedText.isEmpty
+    }
+
     /// 1発話ぶんを記録する。
     ///
     /// **挿入をブロックしない**: 一覧には即座に反映し、ディスクへの書き出しは
@@ -308,11 +313,6 @@ final class HistoryStore: ObservableObject {
     ///   - prompt: 整形 LLM に送ったシステムプロンプト全文（整形が通ったときのみ）。
     ///   - speechEngine: 文字起こしに使ったエンジン（`SpeechEngineKind.rawValue`）。
     ///   - insertion: 挿入結果。挿入する文字が残らなかった発話は nil。
-    /// 無音（文字起こしが何も返さなかった・認識を省いた）は残さない。後から見ても何も分からない（Issue #81 / #122）。
-    nonisolated static func shouldRecord(rawText: String, replacedText: String) -> Bool {
-        !rawText.isEmpty || !replacedText.isEmpty
-    }
-
     func record(
         rawText: String,
         replacedText: String,

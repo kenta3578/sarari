@@ -17,6 +17,7 @@ AppKit の実画面・モデル・TCC に依存しない **純 Swift のロジ�
 |---|---|
 | `PipelineGuardTests` | 世代番号ガード（追い越し・退避キュー・replay。Issue #97 / #100） |
 | `DictationPipelineTests` | 文字起こし → 辞書置換 → フィラー除去 の順序と計時（Issue #66。フェイクのエンジンと固定した時計で） |
+| `SilenceGateTests` | 何も話さずに止めたらエンジンに渡さない（Issue #122）。床ノイズ・机やキーを叩いた音・開始音だけは無音、小声・150ms の短い発話・開始音に重ねた声は渡す側。テスト用の音は `SignalFixtures` |
 | `InsertionPresentationTests` | 挿入結果 → メニューバー状態と HUD の動き（`.claude/rules/insertion-feedback.md`） |
 | `RecordingLimitTests` | 録音の上限で止めた発話の見せ方（挿入しない・クリップボードを案内しない。Issue #17） |
 | `TranscriberPathTests` | WhisperKit のモデルの保存先（書類フォルダに置かない・HubApi の並びに合わせる。Issue #23）。照合する組（モデル＋トークナイザ）と、読み込みが照合した場所だけを指し取得しないこと（Issue #106） |

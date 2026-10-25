@@ -31,7 +31,7 @@ enum DictationPipeline {
     ///   - engine: 文字起こし。失敗は投げ、呼び出し側が「文字起こし失敗」として扱う。
     ///   - rules: 辞書置換ルール。空なら置換しない。
     ///   - fillers: フィラー語。**nil ならフィラー除去そのものを飛ばす**（設定 OFF）。
-    ///   - leadingSoundSeconds: 先頭の開始音の長さ（余裕込み）。この区間は無音に潰してから判定・認識する。
+    ///   - leadingSoundSeconds: 先頭の開始音の長さ（余裕込み）。この区間は無音の判定から外す（エンジンには渡す）。
     ///   - now: 計時に使う時計。テストから固定できるようにする。
     ///
     /// **無音ならエンジンを呼ばず空を返す**（Issue #122）。空は挿入も履歴もされない。
@@ -43,10 +43,10 @@ enum DictationPipeline {
         leadingSoundSeconds: TimeInterval = 0,
         now: () -> Date = { Date() }
     ) async throws -> Output {
-        let samples = SilenceGate.muteLeading(samples, seconds: leadingSoundSeconds)
-        guard !SilenceGate.isSilent(samples) else {
-            // 閾値を実測で見直せるよう、声とみなした窓の数だけ残す（音声も本文も残さない）。
-            Log.asr.info("無音とみなして認識を省いた（声の窓 \(SilenceGate.voicedWindows(samples), privacy: .public)）")
+        let voicedRun = SilenceGate.longestVoicedRun(samples, ignoringLeading: leadingSoundSeconds)
+        guard voicedRun >= SilenceGate.minimumVoicedRun else {
+            // 閾値を実測で見直せるよう、声の窓が続いた数だけ残す（音声も本文も残さない）。
+            Log.asr.info("無音とみなして認識を省いた（声の窓 \(voicedRun, privacy: .public)）")
             return Output(rawText: "", replacedText: "", durations: .init(transcribeMs: 0, replaceMs: 0))
         }
 
