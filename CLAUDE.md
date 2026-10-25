@@ -74,7 +74,9 @@ Mac（Apple Silicon）で、音声 → 文字起こし → カーソルへ直挿
 **出す時機**: 更新履歴の「次の版」に使う人から見た変化が溜まり、かつ develop の版を実機で数日使って困りごとが出ていないとき。日付では決めない。
 
 1. `project.yml` の `MARKETING_VERSION` と `CURRENT_PROJECT_VERSION` を上げ、`docs/changelog.md` の「次の版」を `vX.Y.Z（YYYY-MM-DD）` に改名する（develop への PR）。**同じ PR で `docs/MANUAL.md` を「次の版」の各項目と今の `Sources/` の挙動に突き合わせ、ズレを直す**（各 PR で直す決まりの取りこぼしをここで拾う。CI で自動更新しないのは、公開リポでは Actions のログと bot の PR が誰でも見えるため）
-2. **リリース前の検査を通す**: 手元のレビューのプレイブック「リリース前・初回公開前に通す」の段1〜7（脅威カタログ → 機能別の考慮事項 → `local_docs/threat-model.md`、今の develop をビルドした実物、`/r-expose`・`/r-shipped`）。結果は `local_docs/threat-review-vX.Y.Z.md` に置き、未修正の弱点は Issue・PR に書かない。テストにできる行はテストにする
+2. **リリース前の検査を通す**: 手元のレビューのプレイブック「リリース前・初回公開前に通す」の全段（脅威カタログ → 機能別の考慮事項 → `local_docs/threat-model.md`、今の develop をビルドした実物、使われ方のシナリオ、`/r-expose`・`/r-shipped`）。結果は `local_docs/threat-review-vX.Y.Z.md` に置き、未修正の弱点は Issue・PR に書かない。テストにできる行はテストにする
+   - シナリオの置き場: `docs/scenarios.md`（まだ無い。次のリリースで書く）。E2E にするかの基準はプレイブック側にあり、ここには写さない
+   - E2E の走らせ方: まだ無い（作ったらここにコマンドを書く）
 3. develop → main の PR を作ってマージする（`gh pr create --base main --head develop`）
 4. main の先頭にタグを打つ: `git tag -a vX.Y.Z origin/main -m vX.Y.Z && git push origin vX.Y.Z`
 5. タグの push で `release` ワークフローが走り、Releases に `sarari-vX.Y.Z.zip` が付いたことを確かめる（`gh release view vX.Y.Z`）。タグと `MARKETING_VERSION` が違うと止まる
