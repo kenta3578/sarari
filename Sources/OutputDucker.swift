@@ -97,6 +97,8 @@ final class OutputDucker {
 
     private func put(back record: Record) {
         store.save(nil)
+        // 控えが壊れていたら（手で書き換えられた NaN など）書かない。
+        guard record.original.isFinite, (0...1).contains(record.original) else { return }
         // 本人が録音中に音量を変えていたら、その音量を優先する。
         guard let current = control.volume(of: record.uid),
               current <= Self.silentThreshold else { return }
