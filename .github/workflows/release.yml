@@ -94,6 +94,13 @@ jobs:
             echo "- Apple Silicon の Mac 専用です"
             echo "- macOS 26 以降は内蔵の音声認識を使い、ダウンロードは要りません。macOS 14〜15 では WhisperKit になり、初回に約 630MB のモデルを Hugging Face から取得します（これが唯一の通信です）"
             echo "- アクセシビリティの許可が要ります。許可しないと録音キーを押しても反応しません。版を入れ替えたあとは許可を付け直してください"
+            echo
+            # 公証していないので、落とした zip が本物かは sha256 で確かめてもらう
+            echo "SHA-256（\`shasum -a 256 sarari-$TAG.zip\` で確かめられます）:"
+            echo
+            echo "\`\`\`"
+            echo "$(shasum -a 256 "build/release/sarari-$TAG.zip" | cut -d' ' -f1)  sarari-$TAG.zip"
+            echo "\`\`\`"
           } > build/release/notes.md
           cat build/release/notes.md
 

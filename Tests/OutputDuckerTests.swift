@@ -107,6 +107,19 @@ struct OutputDuckerTests {
         #expect(output.volumes["speaker"] == 0)
     }
 
+    @Test("控えが壊れていたら（NaN・範囲外）書き込まず、控えだけ消す")
+    func ignoresBrokenRecord() {
+        for broken in [Double.nan, 5, -1] {
+            let output = FakeOutput()
+            output.volumes["speaker"] = 0
+            let store = FakeStore()
+            store.record = .init(uid: "speaker", original: broken)
+            OutputDucker(control: output, store: store, isEnabled: { true }).recoverIfNeeded()
+            #expect(output.volumes["speaker"] == 0)
+            #expect(store.record == nil)
+        }
+    }
+
     @Test("下げたまま落ちていたら、次の起動で戻す")
     func recoversAfterCrash() {
         let output = FakeOutput()
