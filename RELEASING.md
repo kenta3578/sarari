@@ -4,10 +4,12 @@
 
 ## いま動いているもの: アドホック署名の zip
 
-タグ `vX.Y.Z` を push すると、`.github/workflows/release.yml` が `scripts/build-release.sh` で
-アドホック署名の `sarari.app` を作り、`sarari-vX.Y.Z.zip` を GitHub Releases に添付する（Issue #73）。
-リリースノートは `docs/changelog.md` の `## vX.Y.Z（日付）` の節から作る。
-タグと `project.yml` の `MARKETING_VERSION` が違うとジョブは止まる。
+main に push されると、`.github/workflows/release.yml` が `project.yml` の `MARKETING_VERSION` を読み、
+その版のタグがまだ無ければ `scripts/build-release.sh` でアドホック署名の `sarari.app` を作り、
+タグ `vX.Y.Z` と GitHub Releases を作って `sarari-vX.Y.Z.zip` を添付する（Issue #73 / #135）。
+版を上げていない push では何もしない。
+リリースノートは `docs/changelog.md` の `## vX.Y.Z（日付）` の節から作る。節が無いとビルドの前に止まる。
+版上げと節の改名は `./scripts/prepare-release.sh vX.Y.Z` で行う。
 
 手元で同じ物を作るときは `./scripts/build-release.sh vX.Y.Z`（`build/release/` に出る）。
 
@@ -59,34 +61,17 @@ sarari はサンドボックス OFF（グローバルキー監視と ⌘V 合成
 
 ---
 
-## 1. リリースビルドの設定を戻す
+## 1. 署名の設定を Developer ID にする
 
-`project.yml` の `ENABLE_HARDENED_RUNTIME` は、ローカル開発の都合で `NO` になっている。
-**配布ビルドでは必ず `YES` に変更する。**
+Hardened Runtime と entitlements は設定済み（Issue #103）。`project.yml` の `ENABLE_HARDENED_RUNTIME: YES`、
+entitlements は `Sources/sarari.entitlements`（マイクの `com.apple.security.device.audio-input` だけ）。
+Developer ID で出すときに変えるのは署名の設定だけ:
 
 ```yaml
 # project.yml
-        ENABLE_APP_SANDBOX: NO           # ← Accessibility / CGEvent のため OFF のまま
-        ENABLE_HARDENED_RUNTIME: YES     # ← 配布時は YES（notarization の必須条件）
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "Developer ID Application"
         DEVELOPMENT_TEAM: "<TEAMID>"
-```
-
-Hardened Runtime を有効にすると、マイクとイベント送出に entitlement が要る。
-`Sources/sarari.entitlements` を作って target の `ENTITLEMENTS` に指定する:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>com.apple.security.app-sandbox</key>
-	<false/>
-	<key>com.apple.security.device.audio-input</key>
-	<true/>
-</dict>
-</plist>
 ```
 
 `MARKETING_VERSION` と `CURRENT_PROJECT_VERSION` も上げること。
@@ -191,7 +176,7 @@ spctl -a -vvv -t install build/sarari-<VERSION>.dmg
 | 症状 | 原因 |
 |---|---|
 | `The signature does not include a secure timestamp` | `--timestamp` を付け忘れている |
-| `The executable does not have the hardened runtime enabled` | `ENABLE_HARDENED_RUNTIME: NO` のまま |
+| `The executable does not have the hardened runtime enabled` | `codesign` に `--options runtime` が渡っていない（`scripts/build-release.sh` を参照） |
 | `The binary is not signed with a valid Developer ID certificate` | Apple Development 証明書で署名している（Developer ID が必要） |
 | SwiftPM 依存のバイナリが弾かれる | `--deep` ではなく、内包フレームワークを個別に署名する |
 

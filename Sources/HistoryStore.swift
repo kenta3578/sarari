@@ -299,6 +299,11 @@ final class HistoryStore: ObservableObject {
 
     // MARK: - 記録
 
+    /// 無音（文字起こしが何も返さなかった・認識を省いた）は残さない。後から見ても何も分からない（Issue #81 / #122）。
+    nonisolated static func shouldRecord(rawText: String, replacedText: String) -> Bool {
+        !rawText.isEmpty || !replacedText.isEmpty
+    }
+
     /// 1発話ぶんを記録する。
     ///
     /// **挿入をブロックしない**: 一覧には即座に反映し、ディスクへの書き出しは
@@ -315,8 +320,7 @@ final class HistoryStore: ObservableObject {
         durations: HistoryEntry.Durations,
         insertion: HistoryEntry.Insertion?
     ) {
-        // 無音（文字起こしが何も返さなかった）は残さない。後から見ても何も分からない（Issue #81）。
-        guard !rawText.isEmpty || !replacedText.isEmpty else { return }
+        guard Self.shouldRecord(rawText: rawText, replacedText: replacedText) else { return }
 
         let createdAt = Date()
         var entry = HistoryEntry(

@@ -1,35 +1,66 @@
-# タグ vX.Y.Z を push したら sarari.app をビルドして zip にし、GitHub Releases に添付する（Issue #73）。
+# main に入ったら、project.yml の版（MARKETING_VERSION）のリリースがまだ無ければ作る（Issue #73 / #135）。
+# sarari.app をビルドして zip にし、タグ vX.Y.Z と GitHub Releases を作って添付する。
 # Xcode を持っていない人が、ダウンロードして開くだけで入れられるようにするため。
+# 版を上げていないマージ（説明書の直しだけなど）では何もしない。
 # 署名はアドホック（Developer ID と公証は未対応。理由は RELEASING.md）。
 name: release
 
 on:
   push:
-    tags: ['v*.*.*']
+    branches: [main]
+  workflow_dispatch: # 前回のジョブが落ちたときの再実行用
 
 permissions: {} # 権限はジョブ側で必要な分だけ付ける
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-main
   cancel-in-progress: false
 
 jobs:
+  check:
+    # 出すかどうかだけを安いランナーで決める（版を上げていないマージで macOS のランナーを起こさない）
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      release: ${{ steps.version.outputs.release }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # 既存のタグを見るため
+          persist-credentials: false
+
+      - name: 版を読み、まだ出していないか確かめる
+        id: version
+        run: |
+          tag="v$(sed -n 's/^ *MARKETING_VERSION: *"\(.*\)"/\1/p' project.yml)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::notice::$tag は出し済み。版を上げていないのでリリースしない"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # 版を上げたのに更新履歴の節が無いなら、ビルドする前に止める
+          if ! grep -q "^## $tag（" docs/changelog.md; then
+            echo "::error::docs/changelog.md に「## $tag（日付）」の節が無い。scripts/prepare-release.sh $tag で「次の版」を改名する"
+            exit 1
+          fi
+          echo "release=true" >> "$GITHUB_OUTPUT"
+
   release:
+    needs: check
+    if: needs.check.outputs.release == 'true'
     # 既定の Apple 音声認識（SpeechAnalyzer）は macOS 26 SDK が要る
     runs-on: macos-26
     permissions:
-      contents: write # Releases の作成と添付
+      contents: write # タグ・Releases の作成と添付
+    env:
+      TAG: ${{ needs.check.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: タグと MARKETING_VERSION が一致するか
-        # 一致しないと「v0.2.0 の zip を開くと 0.1.0 と名乗る」版ができる
-        run: |
-          declared="v$(sed -n 's/^ *MARKETING_VERSION: *"\(.*\)"/\1/p' project.yml)"
-          if [ "$declared" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::タグ $GITHUB_REF_NAME と project.yml の MARKETING_VERSION ($declared) が違う"
-            exit 1
-          fi
+        with:
+          persist-credentials: false # ビルド中に動く依存へトークンを見せない。Releases へは gh に env で渡す
 
       - name: 道具をそろえる
         # ランナーの既定の Xcode は予告のうえで切り替わるので、版を明示して固定する
@@ -39,18 +70,18 @@ jobs:
           brew install xcodegen
 
       - name: ビルドして zip にする
-        run: ./scripts/build-release.sh "$GITHUB_REF_NAME"
+        run: ./scripts/build-release.sh "$TAG"
 
       - name: リリースノートを作る
         # 更新履歴の「## vX.Y.Z（日付）」の節をそのまま使い、入れ方と必要な許可を添える（RELEASING.md「リリースノートに必ず書くこと」）
         run: |
-          section=$(awk -v tag="$GITHUB_REF_NAME" '
+          section=$(awk -v tag="$TAG" '
             index($0, "## " tag "（") == 1 { on = 1; next }
             on && /^## / { exit }
             on { print }
           ' docs/changelog.md)
           if [ -z "$(echo "$section" | tr -d '[:space:]')" ]; then
-            echo "::error::docs/changelog.md に「## ${GITHUB_REF_NAME}（日付）」の節が無い。「次の版」を改名してからタグを打つ"
+            echo "::error::docs/changelog.md の「## ${TAG}（日付）」の節が空"
             exit 1
           fi
           {
@@ -58,31 +89,38 @@ jobs:
             echo
             echo "---"
             echo
-            echo "**入れ方**: \`sarari-$GITHUB_REF_NAME.zip\` を展開して「アプリケーション」に移し、[README のインストール](https://github.com/$GITHUB_REPOSITORY#インストール)の手順で開きます。開発元の署名がないので、初回だけ Mac に止められます。"
+            echo "**入れ方**: \`sarari-$TAG.zip\` を展開して「アプリケーション」に移し、[README のインストール](https://github.com/$GITHUB_REPOSITORY#インストール)の手順で開きます。開発元の署名がないので、初回だけ Mac に止められます。"
             echo
             echo "- Apple Silicon の Mac 専用です"
             echo "- macOS 26 以降は内蔵の音声認識を使い、ダウンロードは要りません。macOS 14〜15 では WhisperKit になり、初回に約 630MB のモデルを Hugging Face から取得します（これが唯一の通信です）"
             echo "- アクセシビリティの許可が要ります。許可しないと録音キーを押しても反応しません。版を入れ替えたあとは許可を付け直してください"
+            echo
+            # 公証していないので、落とした zip が本物かは sha256 で確かめてもらう
+            echo "SHA-256（\`shasum -a 256 sarari-$TAG.zip\` で確かめられます）:"
+            echo
+            echo "\`\`\`"
+            echo "$(shasum -a 256 "build/release/sarari-$TAG.zip" | cut -d' ' -f1)  sarari-$TAG.zip"
+            echo "\`\`\`"
           } > build/release/notes.md
           cat build/release/notes.md
 
-      - name: Releases に添付する
-        # 下書きで作って zip を付けてから公開する（Immutable releases を有効にしても通る順番）
+      - name: タグと Releases を作って添付する
+        # 下書きで作って zip を付けてから公開する（Immutable releases を有効にしても通る順番）。
+        # タグは公開した時点で、このジョブがビルドしたコミット（GITHUB_SHA）に作られる
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="$GITHUB_REF_NAME"
-          zip="build/release/sarari-$tag.zip"
-          draft=$(gh release view "$tag" --json isDraft -q .isDraft 2>/dev/null || echo none)
+          zip="build/release/sarari-$TAG.zip"
+          draft=$(gh release view "$TAG" --json isDraft -q .isDraft 2>/dev/null || echo none)
           case "$draft" in
             none)
-              gh release create "$tag" "$zip" --draft \
-                --title "sarari $tag" --notes-file build/release/notes.md --verify-tag ;;
+              gh release create "$TAG" "$zip" --draft --target "$GITHUB_SHA" \
+                --title "sarari $TAG" --notes-file build/release/notes.md ;;
             true)
               # 前回のジョブが公開前に落ちた。下書きの zip を差し替えて続ける
-              gh release upload "$tag" "$zip" --clobber ;;
+              gh release upload "$TAG" "$zip" --clobber ;;
             *)
-              echo "::error::$tag は公開済み。版を上げて新しいタグを打つ"
+              echo "::error::$TAG は公開済み。版を上げて出し直す"
               exit 1 ;;
           esac
-          gh release edit "$tag" --draft=false
+          gh release edit "$TAG" --draft=false

@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-/// ダウンロードした WhisperKit のモデル重みが、**開発時に確かめたものと同じか**を照合する
+/// 取得した WhisperKit のモデル重みとトークナイザが、**開発時に確かめたものと同じか**を照合する
 /// （Issue #106）。
 ///
 /// ## なぜ revision 固定ではないのか
@@ -22,17 +22,26 @@ import Foundation
 ///    説明している（パターンは README 側にある。**ここに書くとこのファイルが引っかかる**）。
 ///    通信を足せばその根拠そのものが消える
 ///
+/// ## 何を、いつ照合するか
+///
+/// - **読み込むたびに全ファイルを照合する。** 646MB で 0.3 秒ほど（実測）で、モデルの読み込み本体より
+///   ずっと軽い。以前は一度通ると印を残して以後ファイルを見なかったので、あとの変化に気づけなかった
+/// - **ディレクトリの中身とマニフェストが一致すること**を見る。読み込む側はディレクトリの中を
+///   ファイル名で探す（トークナイザは `chat_template.jinja` があれば読む等）ので、記録に無いファイルが
+///   あれば照合していないものが読まれうる。対象外は最上位の `.cache`（取得時のメタデータで、
+///   読み込みでは使わない）と `.DS_Store` だけ
+///
 /// ## この検証が保証すること・しないこと
 ///
-/// - **する**: 開発時に確かめた重みから**あとで変わった**ことの検知（＝上の脅威そのもの）
-/// - **しない**: 最初に取得した重みが本物かどうか。マニフェストは実機のキャッシュから
+/// - **する**: 開発時に確かめた重み・トークナイザから**あとで変わった**ことの検知
+/// - **しない**: 最初に取得したものが本物かどうか。マニフェストは実機のキャッシュから
 ///   起こしているので、そこは trust on first use のまま
 ///
 /// マニフェストの作り直しは `scripts/model-manifest.sh`。
 enum ModelIntegrity {
 
-    /// 照合する 1 ファイル。パスはモデルディレクトリからの相対。
-    struct Entry {
+    /// 照合する 1 ファイル。パスは照合するディレクトリからの相対。
+    struct Entry: Sendable {
         let path: String
         let sha256: String
         let size: Int
@@ -42,6 +51,7 @@ enum ModelIntegrity {
         case missing(String)
         case sizeMismatch(String)
         case digestMismatch(String)
+        case unexpected(String)
 
         var errorDescription: String? {
             switch self {
@@ -50,6 +60,8 @@ enum ModelIntegrity {
             case .sizeMismatch(let path), .digestMismatch(let path):
                 return "モデルの内容が記録と一致しません（\(path)）。"
                      + "取得元が更新されたか、ファイルが壊れています。"
+            case .unexpected(let path):
+                return "モデルのフォルダに記録に無いファイルがあります（\(path)）。"
             }
         }
     }
@@ -82,32 +94,27 @@ enum ModelIntegrity {
         .init(path: "TextDecoderContextPrefill.mlmodelc/weights/weight.bin", sha256: "1310070082639173e9d81508c5f220692d489e85655aa6883cc1c7506da7fcfd", size: 12288192),
     ]
 
-    /// このマニフェストの版。中身が変われば値も変わるので、**差し替えたら自動的に再検証**される。
-    static func manifestDigest(_ entries: [Entry]) -> String {
-        var hasher = SHA256()
-        for entry in entries.sorted(by: { $0.path < $1.path }) {
-            hasher.update(data: Data("\(entry.path):\(entry.sha256):\(entry.size)\n".utf8))
-        }
-        return hex(hasher.finalize())
-    }
+    /// トークナイザ（`openai/whisper-large-v3`）。WhisperKit が `loadTokenizer` で読む 3 ファイル。
+    /// 認識結果の文字列はここで決まるので、重みと同じく照合する。
+    /// 2026-10-24 に実機のキャッシュ（2026-09-16 取得）から起こした。
+    static let whisperLargeV3Tokenizer: [Entry] = [
+        .init(path: "config.json", sha256: "ad0e8d1e46f4d01f7861a21509e5d0f977d6cc1f367a370603c92541d819807b", size: 1272),
+        .init(path: "tokenizer_config.json", sha256: "844b642c73a91359722f47b35705f7174686df33d252695d8572cf9ac03a6389", size: 282843),
+        .init(path: "tokenizer.json", sha256: "6d8cbd7cd0d8d5815e478dac67b85a26bbe77c1f5e0c6d76d1ce2abc0e5f21ca", size: 2480617),
+    ]
 
-    /// 検証済みを覚えておくキー。数百 MB のハッシュは時間がかかるので毎回は回さない。
-    private static let verifiedKey = "verifiedModelManifest"
-
-    /// モデルディレクトリを照合する。**一致しなければ throw**（呼び出し側が読み込みを止める）。
+    /// ディレクトリを照合する。**一致しなければ throw**（呼び出し側が読み込みを止める）。
     ///
-    /// 同じマニフェストで一度通っていれば読み飛ばす。マニフェストを差し替えると
-    /// 版が変わるので、次回に必ずもう一度回る。
-    static func verify(directory: URL,
-                       entries: [Entry] = largeV3Turbo,
-                       defaults: UserDefaults = .standard) throws {
-        let digest = manifestDigest(entries)
-        if defaults.string(forKey: verifiedKey) == digest { return }
-
+    /// 毎回すべてのファイルを読む。記録に無いファイルがあっても落とす。
+    static func verify(directory: URL, entries: [Entry]) throws {
+        let present = try filesInside(directory)
+        let expected = Set(entries.map(\.path))
+        if let extra = present.subtracting(expected).sorted().first {
+            throw VerificationError.unexpected(extra)
+        }
         for entry in entries {
             let url = directory.appendingPathComponent(entry.path)
-            guard let size = try? FileManager.default
-                .attributesOfItem(atPath: url.path)[.size] as? Int else {
+            guard present.contains(entry.path), let size = fileSize(url) else {
                 throw VerificationError.missing(entry.path)
             }
             // 先にサイズを見る。違えば数百 MB を読まずに落とせる。
@@ -116,7 +123,43 @@ enum ModelIntegrity {
                 throw VerificationError.digestMismatch(entry.path)
             }
         }
-        defaults.set(digest, forKey: verifiedKey)
+    }
+
+    /// 全ファイルがあるか（中身は読まない）。取得が要るかの判断に使う。
+    static func hasAllFiles(directory: URL, entries: [Entry]) -> Bool {
+        entries.allSatisfy { fileSize(directory.appendingPathComponent($0.path)) != nil }
+    }
+
+    /// ディレクトリの中のファイル（ディレクトリ以外すべて。リンクも含む）の相対パス。
+    /// 最上位の `.cache` と `.DS_Store` は除く。
+    private static func filesInside(_ directory: URL) throws -> Set<String> {
+        let base = directory.standardizedFileURL
+        let keys: [URLResourceKey] = [.isDirectoryKey, .isSymbolicLinkKey]
+        guard let walker = FileManager.default.enumerator(at: base, includingPropertiesForKeys: keys)
+        else { return [] }
+        var files = Set<String>()
+        for case let url as URL in walker {
+            let relative = url.standardizedFileURL.pathComponents
+                .dropFirst(base.pathComponents.count).joined(separator: "/")
+            let values = try url.resourceValues(forKeys: Set(keys))
+            if relative == ".cache" {
+                walker.skipDescendants()
+                continue
+            }
+            if url.lastPathComponent == ".DS_Store" { continue }
+            // リンクは辿らずに 1 ファイルとして数える（記録に無ければ落ちる）。
+            if values.isDirectory == true, values.isSymbolicLink != true { continue }
+            files.insert(relative)
+        }
+        return files
+    }
+
+    /// 通常のファイルならサイズ。無い・ディレクトリ・リンクなら nil。
+    private static func fileSize(_ url: URL) -> Int? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              attributes[.type] as? FileAttributeType == .typeRegular
+        else { return nil }
+        return attributes[.size] as? Int
     }
 
     /// ファイル全体を読み込まずに SHA-256 を取る（weight.bin は 400MB ある）。

@@ -2,7 +2,7 @@
 
 `sarariTests`（Swift Testing）。`xcodebuild test` はアプリを `TEST_HOST` として起動するが、
 `AppDelegate` が XCTest 環境を検知して起動処理（権限・モデル・ホットキー）を走らせないので、
-権限ダイアログもモデルのダウンロードも出ない。実行は 0.1 秒未満。
+権限ダイアログもモデルのダウンロードも出ない。実行は 1 秒未満（クリップボードの復元を待つ `TextInjectorClipboardTests` が大半）。
 
 ```bash
 xcodebuild test -project sarari.xcodeproj -scheme sarari \
@@ -17,10 +17,14 @@ AppKit の実画面・モデル・TCC に依存しない **純 Swift のロジ�
 |---|---|
 | `PipelineGuardTests` | 世代番号ガード（追い越し・退避キュー・replay。Issue #97 / #100） |
 | `DictationPipelineTests` | 文字起こし → 辞書置換 → フィラー除去 の順序と計時（Issue #66。フェイクのエンジンと固定した時計で） |
+| `SilenceGateTests` | 何も話さずに止めたらエンジンに渡さない（Issue #122）。床ノイズ・机やキーを叩いた音・開始音だけは無音、小声・150ms の短い発話・開始音に重ねた声は渡す側。テスト用の音は `SignalFixtures` |
 | `InsertionPresentationTests` | 挿入結果 → メニューバー状態と HUD の動き（`.claude/rules/insertion-feedback.md`） |
 | `RecordingLimitTests` | 録音の上限で止めた発話の見せ方（挿入しない・クリップボードを案内しない。Issue #17） |
-| `TranscriberPathTests` | WhisperKit のモデルの保存先（書類フォルダに置かない・HubApi の並びに合わせる。Issue #23） |
+| `TranscriberPathTests` | WhisperKit のモデルの保存先（書類フォルダに置かない・HubApi の並びに合わせる。Issue #23）。照合する組（モデル＋トークナイザ）と、読み込みが照合した場所だけを指し取得しないこと（Issue #106） |
+| `ModelIntegrityTests` | モデルとトークナイザの照合。照合のあとの変化・記録に無いファイルを検出すること（Issue #106。小さな代用ファイルで） |
+| `ModelLoadSequenceTests` | 取得 → 照合 → 読み込み → 照合 の順。揃っていれば取得しない・照合に落ちたら読み込まない（Issue #106） |
 | `HistoryEntryTests` | `meta.json` の互換。**整形系の列を持つ古い記録が読めること**（#128〜#131 で書く側だけ消した） |
+| `RecordingReadinessTests` | 録音キーを押したときに始めるか（読み込み中・モデルの失敗・マイク権限なしは始めず理由を見せる。挿入の失敗や処理中からは始める）と、待機に戻すときにモデルの失敗を消さないこと（Issue #123） |
 | `FailureHintTests` | 失敗の手がかりの契約（ボタンを出す／出さない・状態まで運ばれるか） |
 | `ResultRetentionTests` | 挿入できなかった結果の残し先。履歴が必ず含まれること・保存値の綴り |
 | `ReplacementsTests` | 辞書置換の 1 パス最長一致。ルールファイルの取り込み（重複を飛ばす・壊れた JSON は足さない）と、配布する語彙セット（`presets/`）が一般の語を壊さないこと |
@@ -32,6 +36,8 @@ AppKit の実画面・モデル・TCC に依存しない **純 Swift のロジ�
 | `DataDirectoryTests` | 旧名の置き場 `~/koemakase`・`~/koebun` からの移行。新しい置き場があれば触らない。旧名が2つあれば新しい名前の方を移す |
 | `PasteboardTests` | 全 type の退避と復元（名前付きペーストボードで隔離） |
 | `PasteboardMarkerTests` | クリップボードに立てる目印。挿入用（4 つ）とユーザーのコピー（Concealed のみ）の違い |
+| `TextInjectorGuardTests` | 挿入先を照合しなくても、パスワード欄・Secure Keyboard Entry・権限なしでは ⌘V を送らない。パスワード欄ではクリップボードにも残さない（Issue #104 / #116） |
+| `TextInjectorClipboardTests` | 続けて挿入しても、借りたクリップボードが1回目の前の内容に戻る（元が空なら空に、判定待ちの間に終了しても）。復元が送出より先に走らない順序。途中でユーザーがコピーした分は踏み潰さない。本物の待ち時間（250ms）が足りるかは見ていない（Issue #105。名前付きペーストボードとフェイクの送出で） |
 | `HotKeyJudgeTests` | 修飾キーの左右区別・合成イベント・複数修飾キーの正規化 |
 | `LevelBarsTests` | 最小表示の棒（7 本）。黙ると点、声で高くなり、文字起こし中は波形の形で止まる。音節の切れ目で潰れない |
 
@@ -40,11 +46,13 @@ AppKit の実画面・モデル・TCC に依存しない **純 Swift のロジ�
 | ファイル | 対象 |
 |---|---|
 | `DocScreenshotsTests` | 説明書サイトの画面画像を描き出す（Issue #56）。`scripts/docs-shots.sh` が書き出し先と仮のホームを渡したときだけ走り、ふだんの `xcodebuild test` では飛ばされる |
+| `E2E/ScenarioE2ETests` | 使われ方のシナリオ S1〜S5 を、読み上げ音声 → 本物の Apple 音声認識 → ⌘V → テスト用の窓（`sarariE2EHost`）まで通す（Issue #126）。`scripts/e2e.sh` が音声の置き場と仮のホームを渡したときだけ走る。アクセシビリティ権限と画面が要るので手元のみ |
 
 ## 置かないもの
 
 - WhisperKit を読み込むもの（約 630MB の DL と数十秒のロード）。要るなら `.disabled` で常時実行から外す
-- TCC ダイアログ・グローバルホットキー・他アプリへの挿入（XCUITest でも権限は自動化できない。実機で手動確認）
+- TCC ダイアログ・グローバルホットキー（XCUITest でも権限は自動化できない。実機で手動確認）
+- 他アプリへの挿入（ふだんのテストには置かない。通しで見るのは上の `E2E/ScenarioE2ETests` だけ）
 - 見た目（`.claude/rules/visual-check.md` の手順でスクリーンショット）
 
 ## 書き方

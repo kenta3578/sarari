@@ -165,6 +165,8 @@ final class RecordingHUDModel: ObservableObject {
         guard pendingResult == nil, !isConfirmingCancel else { return false }
         // 失敗は原因を読ませて明示的に閉じさせる必要がある（細いバーには収まらない）。
         if case .failed = status { return false }
+        // 読み込み中に録音キーを押したときは、録音できない理由を読ませる（Issue #123）。
+        if case .loadingModel = status { return false }
         return true
     }
 

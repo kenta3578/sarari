@@ -18,7 +18,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 
 右⌥ 押下（1 回目）
   HotKeyManager                   CGEventTap で修飾キーだけを見て onToggle を呼ぶ
-  AppController.startRecording()  世代番号を進める / 前面アプリの bundle ID を控える
+  AppController.startRecording()  世代番号を進める
   AudioRecorder.start()           AVAudioEngine の installTap。16kHz・mono・Float32 に変換して溜める
   RecordingHUDController.show()   HUD を出す（NSPanel）
   SoundPlayer.play(start)         開始音。鳴っている間ぶんは HUD のレベルを無視する
@@ -35,8 +35,8 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
     └ FillerRemover.apply()            フィラー除去（設定 OFF なら丸ごと飛ばす）
 
   await previousPipeline          前の発話の挿入が終わるまで待つ（貼る順を発話順に揃える）
-  TextInjector.insert()           前面アプリ照合 → 権限確認 → セキュア入力確認
-                                  → ⌘V 合成（既定）か 1 文字ずつ送出 → **成否判定** → 復元判断
+  TextInjector.insert()           権限確認 → セキュア入力確認（挿入先は照合しない。貼るときにフォーカスのある場所へ）
+                                  → ⌘V 合成 → **成否判定** → 復元判断
   InsertionPresentation.make()    結果を「メニューバーの状態」と「HUD の動き」に 1 回だけ翻訳
   PipelineGuard.finish()          自分が追い越されていないかを判定（後述）
   AppState.update()               メニューバーと HUD が同じ enum から描き直る
@@ -81,8 +81,9 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 |---|---:|---|
 | `Engines.swift` | 81 | `SpeechEngine` プロトコルと `SpeechEngineKind`（apple / whisperKit）。差し替えの境界 |
 | `AppleTranscriber.swift` | 184 | Apple SpeechAnalyzer（macOS 26 以降・既定・DL 無し） |
-| `Transcriber.swift` | 91 | WhisperKit large-v3-turbo（初回に約 630MB を取得） |
-| `ModelIntegrity.swift` | 132 | WhisperKit の重みが開発時に確かめたものと同じかを SHA-256 で照合 |
+| `Transcriber.swift` | 191 | WhisperKit large-v3-turbo。ファイルが欠けているときだけ取得し（約 630MB）、揃っていれば配布元に問い合わせずに読む |
+| `ModelLoadSequence.swift` | 21 | 取得 → 照合 → 読み込み → 照合 の順番だけを持つ |
+| `ModelIntegrity.swift` | 179 | WhisperKit の重みとトークナイザが開発時に確かめたものと同じかを、読み込むたびに SHA-256 で照合 |
 | `Replacements.swift` | 140 | 辞書置換のルールと `~/sarari/replacements.json` の読み書き |
 | `FillerRemover.swift` | 153 | フィラー語の決定的な除去（`~/sarari/fillers.json`）。語を足さず、数値・URL・英単語には触れない |
 | `JSONFileSync.swift` | 140 | `replacements.json` / `fillers.json` の読み書きと、外での編集の監視・読み直し（外の編集を上書きしない） |
@@ -91,7 +92,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 
 | ファイル | 行 | 役割 |
 |---|---:|---|
-| `TextInjector.swift` | 545 | **挿入の本体**。前面照合・セキュア入力回避・⌘V 合成・成否判定・クリップボード復元 |
+| `TextInjector.swift` | 545 | **挿入の本体**。セキュア入力回避・⌘V 合成・成否判定・クリップボード復元 |
 | `Pasteboard.swift` | 69 | クリップボードの「機密・一時」目印（nspasteboard.org の慣習）と全 type のスナップショット |
 | `InsertionPresentation.swift` | 63 | 挿入結果 → メニューバー状態 ＋ HUD の動き。**1 か所で導出**して二重分岐を防ぐ |
 
@@ -210,7 +211,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 | `@MainActor` | `AppController` / `AppState` / `SettingsStore` / `TextInjector` / HUD 一式 | UI と状態はすべてメインに閉じる |
 | 実時間スレッド | `AudioRecorder` の tap ブロック | `[Float]` にコピーして渡すだけ。`await` しない |
 | 構造化されない `Task` | `runPipeline` | ハンドルを `lastPipeline` に保持し、次の発話が `await` する |
-| 直列化 | `TextInjector.insert` | 入口で前の挿入を `await`（HUD・履歴からの再挿入も同じ口を通る） |
+| 直列化 | `TextInjector.insert` | 入口で前の挿入を、クリップボードの復元が終わるまで `await`（HUD・履歴からの再挿入も同じ口を通る） |
 
 ビルド設定は `SWIFT_STRICT_CONCURRENCY: complete`。**警告 0 を保つ**のがこのリポジトリの決まりで、`@unchecked Sendable` を増やす代わりに `@MainActor` か actor に閉じる。
 
@@ -218,7 +219,7 @@ Swift 33 ファイル・6,866 行（テスト 17 ファイル・130 ケース）
 
 ## 7. テスト
 
-`Tests/` は **AppKit・実モデル・TCC に依存しない純 Swift のロジックだけ**を見る（130 ケース・実行 0.1 秒未満）。権限ダイアログもモデルのダウンロードも起きない（`AppDelegate` がテスト起動を検知して何も始めないため）。
+`Tests/` は **AppKit・実モデル・TCC に依存しない純 Swift のロジックだけ**を見る（130 ケース・実行 1 秒未満。大半はクリップボードの復元を待つ `TextInjectorClipboardTests`）。権限ダイアログもモデルのダウンロードも起きない（`AppDelegate` がテスト起動を検知して何も始めないため）。
 
 ```bash
 xcodebuild test -project sarari.xcodeproj -scheme sarari \

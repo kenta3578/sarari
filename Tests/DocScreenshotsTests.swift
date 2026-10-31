@@ -55,8 +55,17 @@ struct DocScreenshotsTests {
             model.setElapsed(3)
             (0..<45).forEach { _ in model.push(level: 0) }
         }
+        // 起動直後・権限まわりで録音キーを押したとき（Issue #123）。
+        try await DocShots.renderHUD(name: "hud-loading") { model in
+            model.status = .loadingModel(step: "音声認識モデルを読み込み中…")
+        }
+        try await DocShots.renderHUD(name: "hud-mic-denied") { model in
+            model.status = RecordingReadiness.microphoneDenied
+        }
         try await DocShots.renderHUD(name: "hud-result") { model in
-            let outcome = InsertionOutcome.failed(reason: "録音したアプリが前面にないため挿入しませんでした")
+            // 説明書の「入れたい場所をクリックしてから『もう一度挿入』」が効く失敗を見本にする。
+            // 権限なしだと再挿入も通らず、「設定を開く」ボタンが増えて説明書の alt と合わなくなる。
+            let outcome = InsertionOutcome.failed(reason: "パスワード欄には入力しません", hint: .secureInput)
             model.status = .failed(reason: outcome.headline)
             model.pendingResult = .init(text: DocShots.sampleUtterance, title: outcome.headline,
                                         detail: outcome.detail, isFailure: true, note: nil, hint: outcome.hint)

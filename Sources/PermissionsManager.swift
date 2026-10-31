@@ -13,6 +13,11 @@ enum PermissionsManager {
         }
     }
 
+    /// マイクの権限。録音を始める前に確かめる（Issue #123）。
+    static var microphoneAccess: MicrophoneAccess {
+        MicrophoneAccess(AVCaptureDevice.authorizationStatus(for: .audio))
+    }
+
     /// アクセシビリティ（入力監視 / イベント送出）権限があるか。
     ///
     /// **グローバルなキー監視はこれが true でないと一度も発火しない。** 起動時に監視を
@@ -60,6 +65,8 @@ enum FailureHint: Equatable {
     case accessibilityPermission
     /// Secure Keyboard Entry 中・パスワード欄。**アプリ側から解除する手段は無い**（Issue #104）。
     case secureInput
+    /// マイクの権限が無い（録音しても無音しか入らない。Issue #123）。
+    case microphonePermission
 
     /// HUD のボタンに出す文言。**nil ならボタンを出さない。**
     /// 押しても何も起きないボタンは、原因を読ませる邪魔にしかならない。
@@ -67,16 +74,21 @@ enum FailureHint: Equatable {
         switch self {
         case .accessibilityPermission: return "設定を開く"
         case .secureInput:             return nil
+        case .microphonePermission:    return "設定を開く"
+        }
+    }
+
+    /// ボタンで開くシステム設定の画面。nil なら開く先が無い。
+    var privacyPane: PermissionsManager.PrivacyPane? {
+        switch self {
+        case .accessibilityPermission: return .accessibility
+        case .microphonePermission:    return .microphone
+        case .secureInput:             return nil
         }
     }
 
     /// ボタンを押したときの動作。
     func perform() {
-        switch self {
-        case .accessibilityPermission:
-            PermissionsManager.openPrivacyPane(.accessibility)
-        case .secureInput:
-            break
-        }
+        if let privacyPane { PermissionsManager.openPrivacyPane(privacyPane) }
     }
 }

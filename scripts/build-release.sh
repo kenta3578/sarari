@@ -31,8 +31,21 @@ APP="$DERIVED/Build/Products/Release/sarari.app"
 echo "==> アドホック署名"
 # Apple Silicon は未署名のバイナリを起動しない。--deep は署名に使わない（Apple 非推奨）。
 # 埋め込みのフレームワークを持つようになったら、内側から先に個別に署名する。
-codesign --force --sign - "$APP"
+# Hardened Runtime を有効にし、entitlements はマイクだけ（Issue #103。理由はファイル内のコメント）。
+codesign --force --options runtime --entitlements Sources/sarari.entitlements --sign - "$APP"
 codesign --verify --deep --strict "$APP"
+
+echo "==> 配る物を検査"
+# 配った物は取り消せないので、出す前に機械で止める（v0.4.0 のリリース前の検査で足した）。
+fail() { echo "配布物の検査で止めた: $1" >&2; exit 1; }
+sig=$(codesign -dv "$APP" 2>&1)
+[[ "$sig" =~ flags=[^[:space:]]*runtime ]] || fail "Hardened Runtime が無い"
+ents=$(codesign -d --entitlements - --xml "$APP" 2>/dev/null | plutil -convert json -o - - 2>/dev/null || true)
+[ "$ents" = '{"com.apple.security.device.audio-input":true}' ] || fail "entitlements がマイクだけでない: $ents"
+# テスト用の入口を入れない（grep -q は途中で閉じて SIGPIPE になるので結果を受けてから見る）。
+# シンボル表にはビルドした場所のパスが残る（CI では /Users/runner/…）ので、パスはここでは見ない
+found=$(cat "$APP/Contents/MacOS/"* | strings | grep -E "SARARI_E2E_ENTRY|e2eDictate|SARARI_E2E_FIXTURES" || true)
+[ -z "$found" ] || fail "テスト用の入口が入っている: $(echo "$found" | head -3)"
 
 echo "==> zip を作る"
 mkdir -p "$OUT_DIR"

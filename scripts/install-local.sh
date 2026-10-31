@@ -30,7 +30,7 @@ APP_SRC="$DERIVED/Build/Products/$CONFIG/sarari.app"
 if security find-certificate -c "$IDENTITY" >/dev/null 2>&1; then
   echo "==> $IDENTITY で署名（権限を保持するため）"
   echo "    （キーチェーンの許可ダイアログが出たら「常に許可」。出続けるときは BUILD.md「署名ステップで止まる」）"
-  if ! codesign --force --deep --sign "$IDENTITY" "$APP_SRC"; then
+  if ! codesign --force --deep --options runtime --entitlements Sources/sarari.entitlements --sign "$IDENTITY" "$APP_SRC"; then
     echo "==> 署名に失敗しました。インストールせず終了します（/Applications の旧ビルドはそのまま）" >&2
     echo "    対処: BUILD.md「install-local.sh の署名ステップで止まる」を参照" >&2
     exit 1
@@ -58,7 +58,7 @@ echo "==> $APP_DEST へインストール"
 ditto "$APP_SRC" "$APP_DEST"
 
 echo "==> 署名の確認"
-codesign -dvv "$APP_DEST" 2>&1 | grep -E "Authority|Signature" || true
+codesign -dvv "$APP_DEST" 2>&1 | grep -E "Authority|Signature|flags" || true
 
 echo "==> 起動"
 open -a "$APP_DEST"

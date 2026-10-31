@@ -1,5 +1,4 @@
-import AudioToolbox
-import CoreAudio
+import Foundation
 
 /// 効果音の大きさを Mac 本体の音量から切り離す（Issue #90）。
 ///
@@ -25,25 +24,6 @@ enum SoundVolume {
 
     /// 既定の出力装置の音量（0〜1）。音量を持たない装置（HDMI の一部など）は nil。
     nonisolated static func systemOutputVolume() -> Double? {
-        var device = AudioObjectID(kAudioObjectUnknown)
-        var size = UInt32(MemoryLayout<AudioObjectID>.size)
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain)
-        guard AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device) == noErr,
-              device != kAudioObjectUnknown else { return nil }
-
-        var volume = Float32(0)
-        size = UInt32(MemoryLayout<Float32>.size)
-        address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
-            mScope: kAudioDevicePropertyScopeOutput,
-            mElement: kAudioObjectPropertyElementMain)
-        guard AudioObjectHasProperty(device, &address),
-              AudioObjectGetPropertyData(device, &address, 0, nil, &size, &volume) == noErr
-        else { return nil }
-        return Double(volume)
+        CoreAudioOutputVolume.defaultOutputDevice().flatMap(CoreAudioOutputVolume.volume(of:))
     }
 }

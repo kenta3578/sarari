@@ -12,6 +12,11 @@ packages:
     # sarari.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved で固定される。
     # 依存を上げるときは -resolvePackageDependencies し直して同ファイルをコミットすること。
     from: "0.9.0"
+  # WhisperKit が使っている取得ライブラリ（同梱済み）。トークナイザを**解析せずに**取得するために
+  # 直接使う（Issue #106。読み込みは照合のあと）。版の幅は WhisperKit の指定（upToNextMinor）に合わせる。
+  swift-transformers:
+    url: https://github.com/huggingface/swift-transformers.git
+    minorVersion: "1.1.6"
 
 targets:
   sarari:
@@ -31,12 +36,14 @@ targets:
       - path: Resources/Assets.xcassets
     dependencies:
       - package: WhisperKit
+      - package: swift-transformers
+        product: Hub
     settings:
       base:
         PRODUCT_NAME: sarari
         PRODUCT_BUNDLE_IDENTIFIER: com.kenta3578.koebun
-        MARKETING_VERSION: "0.3.0"
-        CURRENT_PROJECT_VERSION: "3"
+        MARKETING_VERSION: "0.4.0"
+        CURRENT_PROJECT_VERSION: "4"
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: Sources/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -45,12 +52,32 @@ targets:
         # 型で競合を防げているかをコンパイラに確かめさせる唯一の手段。
         SWIFT_STRICT_CONCURRENCY: complete
         MACOSX_DEPLOYMENT_TARGET: "14.0"
-        # ローカル実行前提: sandbox OFF（Accessibility / CGEvent / グローバル監視のため必須）
-        # ⚠️ 他者へ配布する段階では ENABLE_HARDENED_RUNTIME: YES + entitlements 最小化
-        #    + Developer ID 署名 + Notarization に切り替えること。手順は RELEASING.md
+        # sandbox OFF（Accessibility / CGEvent / グローバル監視のため必須）
         ENABLE_APP_SANDBOX: NO
-        ENABLE_HARDENED_RUNTIME: NO
+        # Hardened Runtime は配布版もローカル版も有効（Issue #103）。アクセシビリティとマイクの
+        # 許可を持つアプリなので、他のプログラムに入り込まれないようにする。
+        # scripts/ の codesign でも同じ entitlements と --options runtime を渡している。
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_ENTITLEMENTS: Sources/sarari.entitlements
         # 署名は Xcode で開いた時に各自の Personal Team を割り当てる
+        CODE_SIGN_STYLE: Automatic
+
+  # E2E テストの挿入先（Issue #126）。sarari 本体には入らない。テキスト欄とパスワード欄を持ち、
+  # 欄の中身をファイルへ書き出す。sarari と別のプロセスにするのは、挿入先を AX で読むときに
+  # 自分自身へ問い合わせて固まらないため。
+  sarariE2EHost:
+    type: application
+    platform: macOS
+    sources:
+      - path: E2EHost
+    settings:
+      base:
+        PRODUCT_NAME: sarariE2EHost
+        PRODUCT_BUNDLE_IDENTIFIER: com.kenta3578.sarariE2EHost
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        ENABLE_APP_SANDBOX: NO
         CODE_SIGN_STYLE: Automatic
 
   # 単体テスト（Issue #102）。アプリを TEST_HOST にして同じモジュールとして見る
@@ -65,6 +92,8 @@ targets:
           - README.md
     dependencies:
       - target: sarari
+    # E2E の挿入先（sarariE2EHost）は依存に入れない。sarari-e2e スキームだけが同じ出力先に並べて作る
+    # （ふだんの `xcodebuild test` と CI で作らない。Issue #126）。
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kenta3578.koebunTests
@@ -91,6 +120,31 @@ schemes:
         "-hudSize minimal": true
         "-hudPosition bottomCenter": true
         "-edgeGlowEnabled <true/>": true
+        "-resultRetention hud": true
+        "-hotKeyModifierCodes <array><integer>61</integer></array>": true
+        "-hotKeyExtraKeyCode none": true
+        "-historyRetentionDays <integer>30</integer>": true
+        "-fillerRemovalEnabled <true/>": true
+        "-ignoredRuleSuggestions <array/>": true
+        "-speechEngine apple": true
+
+  # E2E テスト（Issue #126。scripts/e2e.sh が使う）。設定値は sarari-docshots と同じ考え方で
+  # 起動引数から渡し、使っている人の保存値を読まない・書かない。
+  sarari-e2e:
+    build:
+      targets:
+        sarari: all
+        sarariTests: [test]
+        sarariE2EHost: [test]
+    test:
+      targets:
+        - sarariTests
+      commandLineArguments:
+        "-startSound なし": true
+        "-stopSound なし": true
+        "-hudSize minimal": true
+        "-hudPosition bottomCenter": true
+        "-edgeGlowEnabled <false/>": true
         "-resultRetention hud": true
         "-hotKeyModifierCodes <array><integer>61</integer></array>": true
         "-hotKeyExtraKeyCode none": true

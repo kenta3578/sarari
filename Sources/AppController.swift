@@ -13,15 +13,19 @@ final class AppController {
     private let hud = RecordingHUDController()
     /// 録音中に画面の縁を光らせる（Issue #48）。状態は自分で AppState から拾う。
     private let edgeGlow = EdgeGlowController()
-    /// 録音中だけ他のアプリの音楽を止める（Issue #88）。
-    private let mediaPauser = MediaPauser()
+    /// 録音中だけ Mac の音量を下げる（Issue #133）。
+    private let ducker = OutputDucker()
     private let state = AppState.shared
 
-    /// 録音を始めた時点の最前面アプリ。挿入直前の照合に使う（Issue #80）。
-    ///
-    /// **挿入先は録音開始時に確定させる**。停止時に取り直すと、喋っている間に
-    /// アプリを切り替えただけで別のアプリへ貼ってしまう。
-    private var pendingBundleId: String?
+    /// 音声認識モデルの状態（Issue #123）。**読み込み中・失敗の判定はここだけを見る。**
+    /// 表示（`state.status`）は結果パネルを閉じる等で待機に上書きされるので使わない。
+    private var model: ModelReadiness = .loading(.loadingModel(step: "権限を確認中…"))
+    /// 読み込みの世代。追い越された読み込みの結果を捨てる。
+    private var modelLoads = ModelLoads()
+    /// 録音キーを押して、始めない理由を HUD に出しているか。読み込みの終わりで閉じる（失敗なら出し直す）。
+    /// 理由を出したままエンジンを切り替えると、読み込み中の表示に変わったあと待機の細いバーで残るため、
+    /// 読み込み中以外の理由（モデルの失敗・マイク権限なし）でも立てる。
+    private var hudShowsReadinessNotice = false
 
     /// アクセシビリティ権限が付くのを見張るタイマー（Issue #78）。許可を検知したら止める。
     private var accessibilityTimer: Timer?
@@ -35,6 +39,9 @@ final class AppController {
     private var recordingLimitReached = false
     /// 上限で録音を止めるタスク。停止・破棄のたびに外す（前の録音のタイマーが次の録音を止めないため）。
     private var recordingLimitTask: Task<Void, Never>?
+    /// この録音の先頭で開始音が鳴っている長さ（余裕込み）。マイクが拾った開始音を、
+    /// 無音の判定に入れないために使う（Issue #122）。停止処理で読んで 0 に戻す。
+    private var startSoundSeconds: TimeInterval = 0
     /// 追い越しの判定と、見せ損ねた結果の退避（Issue #97 / #100）。
     /// 判定そのものは `PipelineGuard` に閉じていて、AppKit 無しで単体テストできる（Issue #102）。
     private var guardState = PipelineGuard()
@@ -73,7 +80,14 @@ final class AppController {
     }
 
     func start() {
+        // 前回、音量を下げたまま終わっていたら戻す（Issue #133）。
+        ducker.recoverIfNeeded()
         Task { await bootstrap() }
+    }
+
+    /// アプリの終了時に呼ぶ。録音中に終了しても音量を下げたままにしない（Issue #133）。
+    func restoreOutputVolume() {
+        ducker.restore()
     }
 
     private func bootstrap() async {
@@ -113,7 +127,7 @@ final class AppController {
         }
         hud.onStop = { [weak self] in self?.stopRecording() }
         hud.onCancel = { [weak self] in self?.cancelRecording() }
-        hud.onResultDismissed = { [weak self] in self?.presentNextDeferredIfIdle() }
+        hud.onResultDismissed = { [weak self] in self?.resultDismissed() }
 
         // 整形モデルは WhisperKit の**後**に、録音を待たせずに積む。
         // 数GB のダウンロードが走りうるので、ここを await すると起動が止まる。
@@ -147,35 +161,62 @@ final class AppController {
             return
         }
 
+        let load = modelLoads.begin()
         guard let (kind, engine) = resolveSpeechEngine() else {
-            state.update(.failed(reason: "Apple 音声認識には \(EngineSupport.requiresMacOS26)"))
+            finishLoading(.failed(.failed(reason: "Apple 音声認識には \(EngineSupport.requiresMacOS26)")))
             return
         }
 
         // WhisperKit は初回に約630MB を取りに行く。「読み込み中」とだけ出すと
         // 回線次第で数十分固まったように見える（Issue #83）。
         let isDownloading = kind == .whisperKit && !Transcriber.hasCachedModel
-        state.update(.loadingModel(
+        let loading = AppStatus.loadingModel(
             step: isDownloading
                 ? "音声認識モデルをダウンロード中…（約630MB）"
                 : "音声認識モデルを読み込み中…"
-        ))
+        )
+        model = .loading(loading)
+        state.update(loading)
 
         // 選ばれなかった方を降ろす（WhisperKit ならモデルぶんのメモリが返る）。
         if kind != .whisperKit { await whisperTranscriber.unload() }
         if kind != .apple, let appleTranscriber { await appleTranscriber.unload() }
 
+        let result: ModelReadiness
         do {
             try await engine.load()
-            state.update(.idle)
+            result = .ready
         } catch {
             // WhisperKit の modelsUnavailable は生のまま出すと「Model file not found at
             // .../MelSpectrogram.mlmodelc」で、何をすればいいか分からない（Issue #83）。
-            let reason = isDownloading
+            // 照合に落ちたときは取得の直後でもそのまま出す。ネットワークのせいにすると、
+            // 取得元が変わったこと（Issue #106 が検知したいもの）が見えなくなる。
+            let reason = error is ModelIntegrity.VerificationError
+                ? error.localizedDescription
+                : isDownloading
                 ? "音声認識モデルを取得できませんでした（ネットワークと空き容量を確認してください）"
                 : "モデル読込失敗: \(error.localizedDescription)"
             Log.asr.error("音声認識モデルを読み込めませんでした: \(error.localizedDescription)")
-            state.update(.failed(reason: reason))
+            result = .failed(.failed(reason: reason))
+        }
+        // エンジンを続けて切り替えて、後の読み込みに追い越されていたら何もしない。
+        guard modelLoads.isCurrent(load) else { return }
+        finishLoading(result)
+    }
+
+    /// 読み込みを終えた状態を反映する。権限が無ければその失敗、モデルが無ければその失敗、揃えば待機。
+    private func finishLoading(_ result: ModelReadiness) {
+        model = result
+        let end = RecordingReadiness.afterLoad(
+            model: result,
+            accessibilityTrusted: PermissionsManager.isAccessibilityTrusted,
+            noticeShown: hudShowsReadinessNotice)
+        hudShowsReadinessNotice = false
+        state.update(end.status)
+        switch end.hud {
+        case .keep:    break
+        case .hide:    hud.hide()
+        case .present: hud.presentStatus()
         }
     }
 
@@ -190,25 +231,42 @@ final class AppController {
     private func startRecording() {
         // 読込中は始めない。処理中は始めてよい（Issue #97）。先行パイプラインの完了処理が
         // この録音の状態・HUD を潰さないことは、世代番号で守る（Issue #57 H3 の再来を防ぐ）。
-        guard state.status.canStartRecording else { return }
+        guard !state.isRecording else { return }
+        switch RecordingReadiness.decide(model: model,
+                                         status: state.status,
+                                         microphone: PermissionsManager.microphoneAccess) {
+        case .start:
+            break
+        case .notReadyKeepingDisplay:
+            Log.audio.notice("文字起こし中にマイクの権限が無いため、録音を始めませんでした")
+            return
+        case .notReady(let status):
+            // 黙って無視しない。理由を出す（Issue #123）。
+            state.update(status)
+            // 挿入できなかった結果を出しているときは、その結果パネルを潰さない（文章を失わせない）。
+            // 理由はメニューバーに出る。
+            guard !hud.isShowingResult else { return }
+            hud.presentStatus()
+            hudShowsReadinessNotice = true
+            return
+        }
         let generation = guardState.begin()
         do {
-            // 挿入先は録音開始の**前**に控える。NSWorkspace だけなので AX 権限も要らず軽い。
-            pendingBundleId = TextInjector.frontmostBundleId()
-            // 開始音より前に止める（音楽が入らないうちに録音を始めるため）。
-            mediaPauser.pauseIfPlaying()
-
             try recorder.start()
             state.update(.recording)
             scheduleRecordingLimit(generation: generation)
             // 表示サイズ（非表示/最小/通常）の判断は HUD 側に一本化してある。
             hud.show()
             let start = SettingsStore.shared.startSound
-            // 起動音はマイクが録っている最中に鳴る。その分を棒に見せない（Issue #186）。
-            // 録音・文字起こしには触らない。
-            hud.ignoreLevels(forSoundOf: SoundPlayer.play(start))
+            // 起動音はマイクが録っている最中に鳴る。その分を棒に見せず（Issue #186）、
+            // 無音の判定にも入れない（Issue #122）。
+            let soundDuration = SoundPlayer.play(start)
+            hud.ignoreLevels(forSoundOf: soundDuration)
+            startSoundSeconds = SilenceGate.excludedSeconds(forSoundOf: soundDuration)
+            // 開始音が鳴り終わってから下げる（先に下げると開始音が聞こえない）。
+            ducker.lower(after: soundDuration)
         } catch {
-            mediaPauser.resumeIfPaused()
+            ducker.restore()
             state.update(.failed(reason: "録音開始失敗: \(error.localizedDescription)"))
         }
     }
@@ -222,17 +280,32 @@ final class AppController {
         state.update(.processing)
 
         let generation = guardState.generation
-        let expectedBundleId = takePendingBundleId()
+        // 停止音より前に戻す（下げたままだと停止音が聞こえない）。
+        ducker.restore()
         SoundPlayer.play(SettingsStore.shared.stopSound)
         let samples = recorder.stop()
-        mediaPauser.resumeIfPaused()
         // ここで読んで戻す（この録音ぶんの事情なので、次の録音へ持ち越さない）。
         let deviceChanged = audioDeviceChangedDuringRecording
         audioDeviceChangedDuringRecording = false
         let limitReached = recordingLimitReached
         recordingLimitReached = false
+        let leadingSound = startSoundSeconds
+        startSoundSeconds = 0
         cancelRecordingLimit()
 
+        launchPipeline(samples: samples,
+                       leadingSoundSeconds: leadingSound,
+                       deviceChanged: deviceChanged,
+                       limitReached: limitReached,
+                       generation: generation)
+    }
+
+    /// この発話ぶんのパイプラインを、前の発話の後ろに並べて起動する。**同期のまま呼ぶ**（Issue #99）。
+    private func launchPipeline(samples: [Float],
+                                leadingSoundSeconds leadingSound: TimeInterval,
+                                deviceChanged: Bool,
+                                limitReached: Bool,
+                                generation: Int) {
         // **ユーザーが待つ実時間**をここから測る（Issue #107）。履歴の `durations` は
         // 処理ごとの内訳だが、こちらは挿入の順番待ちも含む「押してから入るまで」。
         let signpost = Log.signposter.beginInterval("dictation", id: Log.signposter.makeSignpostID())
@@ -246,7 +319,7 @@ final class AppController {
                 Log.signposter.endInterval("dictation", signpost)
             }
             await runPipeline(samples: samples,
-                              expectedBundleId: expectedBundleId,
+                              leadingSoundSeconds: leadingSound,
                               deviceChanged: deviceChanged,
                               limitReached: limitReached,
                               generation: generation,
@@ -259,7 +332,7 @@ final class AppController {
     /// 文字起こしと後処理そのものは `DictationPipeline` に閉じている。ここに残すのは
     /// 「挿入する・見せる・残す」という副作用の側だけ。
     private func runPipeline(samples: [Float],
-                             expectedBundleId: String?,
+                             leadingSoundSeconds: TimeInterval,
                              deviceChanged: Bool,
                              limitReached: Bool,
                              generation: Int,
@@ -276,7 +349,8 @@ final class AppController {
                 samples: samples,
                 engine: speechEngine,
                 rules: ReplacementStore.shared.rules,
-                fillers: SettingsStore.shared.fillerRemovalEnabled ? FillerStore.shared.list : nil
+                fillers: SettingsStore.shared.fillerRemovalEnabled ? FillerStore.shared.list : nil,
+                leadingSoundSeconds: leadingSoundSeconds
             )
         } catch {
             let status = AppStatus.failed(reason: "文字起こし失敗: \(error.localizedDescription)")
@@ -295,7 +369,6 @@ final class AppController {
         // 前の発話のパイプラインが終わるまで待つ。貼る順番を発話順に揃える（Issue #99）。
         await previousPipeline?.value
         // 挿入は成否を判定して返る。成功と確認できなければ結果を捨てない（Issue #13）。
-        // 録音を始めたアプリと違うところへ貼らないよう、照合用に渡す（Issue #80）。
         // 上限で止めた録音は止め忘れの可能性が高いので、カーソルへは入れない（Issue #17）。
         let outcome: InsertionOutcome
         if text.isEmpty {
@@ -303,7 +376,7 @@ final class AppController {
         } else if limitReached {
             outcome = RecordingLimit.outcome
         } else {
-            outcome = await TextInjector.insert(text, expectedBundleId: expectedBundleId)
+            outcome = await TextInjector.insert(text)
         }
         let resultLocation = SettingsStore.shared.resultLocationDescription(isFailure:)
         // 見せ方（メニューバーの状態と HUD の動き）は 1 か所で導出する（Issue #64）。
@@ -359,12 +432,6 @@ final class AppController {
         }
     }
 
-    /// 録音開始時に控えた挿入先を取り出す。nil なら照合しない（開始時に取れなかった場合）。
-    private func takePendingBundleId() -> String? {
-        defer { pendingBundleId = nil }
-        return pendingBundleId
-    }
-
     /// 追い越されたパイプラインが見せ損ねた結果を出す（Issue #100）。
     /// 結果があれば結果パネルで残す。無ければ状態表示（失敗の原因）を HUD に前面で出す。
     /// HUD が閉じていても出す。閉じたまま状態だけ変えるとメニューバーの色しか変わらず原因が読めない。
@@ -375,6 +442,16 @@ final class AppController {
         } else {
             hud.presentStatus()
         }
+    }
+
+    /// 結果パネル・失敗表示が閉じられた。控えた結果を出し、無ければ準備できていない理由を表示に戻す。
+    private func resultDismissed() {
+        presentNextDeferredIfIdle()
+        // 閉じる操作は表示を待機にする。モデルが無いのに «待機中» と出さない（Issue #123）。
+        guard state.status == .idle else { return }
+        let status = RecordingReadiness.statusAfterDismiss(
+            model: model, accessibilityTrusted: PermissionsManager.isAccessibilityTrusted)
+        if status != .idle { state.update(status) }
     }
 
     /// 結果パネルが閉じられた。控えた結果が残っていれば次を出す（Issue #100）。
@@ -392,8 +469,7 @@ final class AppController {
     private func cancelRecording() {
         guard state.isRecording else { return }
         _ = recorder.stop()
-        mediaPauser.resumeIfPaused()
-        pendingBundleId = nil
+        ducker.restore()
         audioDeviceChangedDuringRecording = false
         recordingLimitReached = false
         cancelRecordingLimit()
@@ -417,10 +493,7 @@ final class AppController {
             return
         }
 
-        state.update(.failed(
-            reason: "アクセシビリティ権限がありません（右⌥ が効きません）",
-            hint: .accessibilityPermission
-        ))
+        state.update(RecordingReadiness.accessibilityMissing)
 
         guard accessibilityTimer == nil else { return }
         let timer = Timer(timeInterval: 2, repeats: true) { _ in
@@ -438,7 +511,10 @@ final class AppController {
         accessibilityTimer?.invalidate()
         accessibilityTimer = nil
         hotkeys.start()
-        state.update(.idle)
+        // モデルの失敗を待機で上書きしない（Issue #123）。
+        if let status = RecordingReadiness.restingStatus(model: model, accessibilityTrusted: true) {
+            state.update(status)
+        }
         Log.hotkey.notice("アクセシビリティ権限を検知したのでホットキーを登録し直しました")
     }
 
@@ -475,3 +551,37 @@ final class AppController {
         stopRecording()
     }
 }
+
+#if DEBUG
+// MARK: - E2E テストの入口（Issue #126）
+
+/// 録音済みの音声を、録音キーを押して話したのと同じ経路（文字起こし → 挿入 → 表示 → 履歴）に流す。
+///
+/// **`#if DEBUG` の中だけに置く。** 環境変数で開け閉めする入口は出荷版でも外から立てられるので、
+/// Release ビルドには入れない（`scripts/e2e.sh` が Release の実行ファイルに無いことを確かめる）。
+extension AppController {
+    /// Release に入っていないことを確かめるための目印。
+    static let e2eEntryMarker = "SARARI_E2E_ENTRY"
+
+    /// 設定で選ばれている音声認識エンジンを読み込み、使える状態になったかを返す
+    /// （テストのホストでは起動処理が走らないため）。`e2eDictate` は録音キーの準備判定を通らないので、
+    /// 読み込みに失敗したまま流すと「何も入らない」としか見えなくなる。
+    func e2eLoadSpeechEngine() async -> Bool {
+        await reloadSpeechEngine()
+        return model == .ready
+    }
+
+    /// 録音を始めて `samples` を話し、止めたのと同じことをする。
+    /// `waitForInsertion` が true なら挿入と履歴の記録まで待って返る。false なら止めた直後に返る
+    /// （前の発話の処理中に次を話す、を再現するため）。
+    func e2eDictate(samples: [Float], waitForInsertion: Bool = true) async {
+        Log.asr.notice("\(Self.e2eEntryMarker, privacy: .public)")
+        let generation = guardState.begin()
+        state.update(.processing)
+        launchPipeline(samples: samples, leadingSoundSeconds: 0,
+                       deviceChanged: false, limitReached: false, generation: generation)
+        guard waitForInsertion else { return }
+        await lastPipeline?.value
+    }
+}
+#endif
