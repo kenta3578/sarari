@@ -4,10 +4,12 @@
 
 ## いま動いているもの: アドホック署名の zip
 
-タグ `vX.Y.Z` を push すると、`.github/workflows/release.yml` が `scripts/build-release.sh` で
-アドホック署名の `sarari.app` を作り、`sarari-vX.Y.Z.zip` を GitHub Releases に添付する（Issue #73）。
-リリースノートは `docs/changelog.md` の `## vX.Y.Z（日付）` の節から作る。
-タグと `project.yml` の `MARKETING_VERSION` が違うとジョブは止まる。
+main に push されると、`.github/workflows/release.yml` が `project.yml` の `MARKETING_VERSION` を読み、
+その版のタグがまだ無ければ `scripts/build-release.sh` でアドホック署名の `sarari.app` を作り、
+タグ `vX.Y.Z` と GitHub Releases を作って `sarari-vX.Y.Z.zip` を添付する（Issue #73 / #135）。
+版を上げていない push では何もしない。
+リリースノートは `docs/changelog.md` の `## vX.Y.Z（日付）` の節から作る。節が無いとビルドの前に止まる。
+版上げと節の改名は `./scripts/prepare-release.sh vX.Y.Z` で行う。
 
 手元で同じ物を作るときは `./scripts/build-release.sh vX.Y.Z`（`build/release/` に出る）。
 
