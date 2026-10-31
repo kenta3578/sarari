@@ -56,6 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 復元は挿入の 0.25 秒後に走る。その待ちの最中に終了すると、口述テキストが
     /// クリップボードに残ったままになる。ここで同期的に戻す（Issue #79）。
     func applicationWillTerminate(_ notification: Notification) {
-        MainActor.assumeIsolated { TextInjector.restorePendingClipboard() }
+        MainActor.assumeIsolated {
+            TextInjector.restorePendingClipboard()
+            // テストのホストでは AppController を作らない（作ると権限の確認などが走る）。
+            if !Self.isRunningTests { AppController.shared.restoreOutputVolume() }
+        }
     }
 }
