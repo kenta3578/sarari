@@ -38,7 +38,7 @@
 3. 文字を入れたい場所にカーソルを置く → **録音キー**（最初は右 ⌥）→ 喋る → もう一度**録音キー**
 4. 初回だけマイクの許可ダイアログが出るので「許可」
 
-ダウンロードは要りません。数 GB のモデルが要るのは、あとで自分で「WhisperKit」を選んだときだけです。
+ダウンロードは要りません。モデル（約 630MB）が要るのは、あとで自分で「WhisperKit」を選んだときだけです。
 
 ### 状態はアイコンの色で分かる
 
@@ -65,6 +65,8 @@
 | <img class="shot light-only" src="./screens/hud-silent.png#gh-light-mode-only" width="280" alt="音を拾えていない HUD。オレンジのマイク斜線"><img class="shot dark-only" src="./screens/hud-silent-dark.png#gh-dark-mode-only" width="280" alt="音を拾えていない HUD。オレンジのマイク斜線"> | 録音を始めて 2 秒たっても一度も音を拾えていない。マイクの権限と入力デバイスを確かめます |
 | <img class="shot light-only" src="./screens/hud-loading.png#gh-light-mode-only" width="280" alt="読み込み中の HUD。音声認識モデルを読み込み中"><img class="shot dark-only" src="./screens/hud-loading-dark.png#gh-dark-mode-only" width="280" alt="読み込み中の HUD。音声認識モデルを読み込み中"> | 音声認識モデルの読み込み中に録音キーを押した。録音は始まりません。読み込みが終わると閉じるので、そこから押し直します |
 | <img class="shot light-only" src="./screens/hud-mic-denied.png#gh-light-mode-only" width="280" alt="マイクの権限が無い HUD。設定を開くボタン"><img class="shot dark-only" src="./screens/hud-mic-denied-dark.png#gh-dark-mode-only" width="280" alt="マイクの権限が無い HUD。設定を開くボタン"> | マイクの権限が無い。録音は始まりません。「設定を開く」でマイクの権限を ON にします |
+
+音声認識モデルの読み込みに失敗したあとに録音キーを押したときも、録音は始めずに HUD で原因を見せます。この表示はアクセシビリティを許可しても消えません。直し方は「困ったとき」にあります。
 
 30 秒を超えた録音をキャンセルするときは確認が入ります。
 
@@ -221,7 +223,7 @@ LLM は口述のたびには使いません。使うのは辞書を育てると�
 
 ## 7. ファイルの場所
 
-すべて端末の中にあります。ネットワークに出るのはモデルの DL だけで、音声もテキストも送信しません。
+すべて端末の中にあります。ネットワークに出るのは WhisperKit のモデルを初めて取得するときだけで（2回目以降の起動や切り替えでは問い合わせません）、音声もテキストも送信しません。
 
 | 内容 | 場所 |
 |---|---|
