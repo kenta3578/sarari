@@ -95,7 +95,7 @@ struct GeneralSettingsView: View {
                     .accessibilityLabel("効果音の大きさ")
                     Image(systemName: "speaker.wave.3.fill").foregroundStyle(.secondary)
                 }
-                Toggle("録音中は再生中の音楽を一時停止する", isOn: $settings.pauseMediaWhileRecording)
+                Toggle("録音中は Mac の音量を下げる", isOn: $settings.lowerVolumeWhileRecording)
 
                 HStack {
                     Button("音を追加…") { importSounds() }
@@ -139,6 +139,7 @@ struct GeneralSettingsView: View {
 
                 Text("選び直すと鳴ります。試聴ボタンでいまの音を聞き直せます。"
                      + "効果音の大きさは Mac 本体の音量を上げても変わりません（本体の音量のほうが小さいときは本体の音量で鳴ります）。"
+                     + "「録音中は Mac の音量を下げる」を入りにすると、開始音のあと音量を 0 にし、停止音の前に元へ戻します（他のアプリの音も全部下がります）。"
                      + "「sarari の音」はアプリに入っている音です。"
                      + "「音を追加…」で選んだ音声ファイル（aiff / wav / mp3 / m4a / caf）は "
                      + "\((SoundPlayer.customDirectory.path as NSString).abbreviatingWithTildeInPath) にコピーされ、「自分の音」に出ます。"

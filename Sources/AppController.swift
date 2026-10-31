@@ -13,8 +13,8 @@ final class AppController {
     private let hud = RecordingHUDController()
     /// 録音中に画面の縁を光らせる（Issue #48）。状態は自分で AppState から拾う。
     private let edgeGlow = EdgeGlowController()
-    /// 録音中だけ他のアプリの音楽を止める（Issue #88）。
-    private let mediaPauser = MediaPauser()
+    /// 録音中だけ Mac の音量を下げる（Issue #133）。
+    private let ducker = OutputDucker()
     private let state = AppState.shared
 
     /// 音声認識モデルの状態（Issue #123）。**読み込み中・失敗の判定はここだけを見る。**
@@ -80,7 +80,14 @@ final class AppController {
     }
 
     func start() {
+        // 前回、音量を下げたまま終わっていたら戻す（Issue #133）。
+        ducker.recoverIfNeeded()
         Task { await bootstrap() }
+    }
+
+    /// アプリの終了時に呼ぶ。録音中に終了しても音量を下げたままにしない（Issue #133）。
+    func restoreOutputVolume() {
+        ducker.restore()
     }
 
     private func bootstrap() async {
@@ -245,9 +252,6 @@ final class AppController {
         }
         let generation = guardState.begin()
         do {
-            // 開始音より前に止める（音楽が入らないうちに録音を始めるため）。
-            mediaPauser.pauseIfPlaying()
-
             try recorder.start()
             state.update(.recording)
             scheduleRecordingLimit(generation: generation)
@@ -259,8 +263,10 @@ final class AppController {
             let soundDuration = SoundPlayer.play(start)
             hud.ignoreLevels(forSoundOf: soundDuration)
             startSoundSeconds = SilenceGate.excludedSeconds(forSoundOf: soundDuration)
+            // 開始音が鳴り終わってから下げる（先に下げると開始音が聞こえない）。
+            ducker.lower(after: soundDuration)
         } catch {
-            mediaPauser.resumeIfPaused()
+            ducker.restore()
             state.update(.failed(reason: "録音開始失敗: \(error.localizedDescription)"))
         }
     }
@@ -274,9 +280,10 @@ final class AppController {
         state.update(.processing)
 
         let generation = guardState.generation
+        // 停止音より前に戻す（下げたままだと停止音が聞こえない）。
+        ducker.restore()
         SoundPlayer.play(SettingsStore.shared.stopSound)
         let samples = recorder.stop()
-        mediaPauser.resumeIfPaused()
         // ここで読んで戻す（この録音ぶんの事情なので、次の録音へ持ち越さない）。
         let deviceChanged = audioDeviceChangedDuringRecording
         audioDeviceChangedDuringRecording = false
@@ -462,7 +469,7 @@ final class AppController {
     private func cancelRecording() {
         guard state.isRecording else { return }
         _ = recorder.stop()
-        mediaPauser.resumeIfPaused()
+        ducker.restore()
         audioDeviceChangedDuringRecording = false
         recordingLimitReached = false
         cancelRecordingLimit()
