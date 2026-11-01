@@ -170,6 +170,13 @@ final class AudioRecorder {
             return
         }
         guard let unit = input.audioUnit else { return }
+        // すでに向いているなら触らない。向け直すだけで構成変更の通知が出て、
+        // 作り直し → 向け直し → 通知 を繰り返す（Issue #143）。
+        var current = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        if AudioUnitGetProperty(unit, kAudioOutputUnitProperty_CurrentDevice,
+                                kAudioUnitScope_Global, 0, &current, &size) == noErr,
+           current == device { return }
         var id = device
         let status = AudioUnitSetProperty(
             unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
@@ -201,6 +208,12 @@ final class AudioRecorder {
 
     /// 録音中に構成が変わった。エンジンは止まっているので、作り直して録り続ける。
     private func handleConfigurationChange() {
+        // エンジンが動いたままなら、録音は途切れていない。自分で入力を向け直したぶんの
+        // 通知が start() のあとに届いただけなので、作り直さない（Issue #143）。
+        guard !engine.isRunning else {
+            Log.audio.info("構成変更の通知を受けたが、録音は続いているので作り直しません")
+            return
+        }
         teardown()
         restartCount += 1
         guard restartCount <= Self.maxRestarts else {
