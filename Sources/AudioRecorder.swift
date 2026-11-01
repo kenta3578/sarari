@@ -72,6 +72,16 @@ final class AudioRecorder {
     /// まずエンジンを作り直して録り続け、作り直せないときと回数の上限を超えたときだけ呼ぶ。
     var onConfigurationChange: (@Sendable () -> Void)?
 
+    /// 構成の変化を受けてエンジンを作り直し、録り続けられたときの通知先。**メインスレッドで呼ばれる**。
+    /// Bluetooth ヘッドセットの切り替えは出力側も作り直すので、その間に鳴らした開始音は
+    /// 聞こえない。鳴らし直すために使う（Issue #139）。
+    var onRestart: (@Sendable () -> Void)?
+
+    /// ここまでに溜めた音声の長さ（秒）。
+    var recordedSeconds: TimeInterval {
+        Double(buffer.withLock { $0.samples.count }) / Double(Self.sampleRate)
+    }
+
     /// レベル通知の最小間隔（20fps）。オーディオスレッドから読むので隔離しない（定数）。
     private nonisolated static let levelInterval: CFAbsoluteTime = 1.0 / 20.0
 
@@ -178,6 +188,7 @@ final class AudioRecorder {
         do {
             try startEngine()
             Log.audio.notice("録音中にオーディオデバイスが変わったので、新しい入力で録り続けます")
+            onRestart?()
         } catch {
             Log.audio.error("デバイスの切り替え後に録音を再開できませんでした: \(error.localizedDescription, privacy: .public)")
             onConfigurationChange?()
