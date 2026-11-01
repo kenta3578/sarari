@@ -38,7 +38,15 @@ final class AudioRecorder {
     }
     private let buffer = OSAllocatedUnfairLock(initialState: TapBuffer())
 
-    private let engine = AVAudioEngine()
+    /// **録音を始めるたびに作り直す。** 1 つを使い回すと、既定入力を切り替えたあとも
+    /// 前のデバイスに張り付いたまま無音を返すことがある（Issue #139）。
+    private var engine = AVAudioEngine()
+
+    /// 今の録音で、構成の変化からエンジンを作り直した回数。上限を超えたら締める。
+    private var restartCount = 0
+    /// 1 回の録音で作り直してよい回数。Bluetooth は開始時の 1 回で足りる。
+    /// 何度も続くのは抜き差しを繰り返しているなど、録り続けても意味がない状況。
+    private static let maxRestarts = 3
 
     /// tap を張っているか。`removeTap` の呼び忘れ・二重呼び出しの両方を防ぐ唯一の真実。
     ///
@@ -52,11 +60,16 @@ final class AudioRecorder {
     /// 波形表示のためだけに使うので、UI 側の負荷を抑えるよう間引いてから渡す。
     var onLevel: (@Sendable (Float) -> Void)?
 
-    /// 録音中にオーディオデバイスの構成が変わったときの通知先。**メインスレッドで呼ばれる**。
+    /// 録音中にオーディオデバイスの構成が変わり、**録り続けられなかった**ときの通知先。
+    /// **メインスレッドで呼ばれる**。
     ///
     /// AVAudioEngine は既定入力デバイスが変わるとエンジンを止め、tap へのバッファ供給が
     /// 途絶える。検知しないと「AirPods が繋がった以降の発話が丸ごと欠けた文字起こし」が
     /// 警告なしに挿入される（Issue #77）。
+    ///
+    /// ただし変化のたびに締めはしない。Bluetooth ヘッドセットはマイクを開いた瞬間に
+    /// 通話用プロファイルへ切り替わるので、締めると録り始めと同時に止まる（Issue #139）。
+    /// まずエンジンを作り直して録り続け、作り直せないときと回数の上限を超えたときだけ呼ぶ。
     var onConfigurationChange: (@Sendable () -> Void)?
 
     /// レベル通知の最小間隔（20fps）。オーディオスレッドから読むので隔離しない（定数）。
@@ -74,22 +87,6 @@ final class AudioRecorder {
         interleaved: false
     )!
 
-    init() {
-        configurationObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange,
-            object: engine,
-            queue: .main
-        ) { [weak self] _ in
-            // `queue: .main` を指定しているのでこのブロックはメインスレッドで届く。
-            // ブロック自体は @Sendable なので、隔離済みであることを明示してから触る。
-            MainActor.assumeIsolated {
-                // 録音していないときの切り替えは通知しない（起動時やデバイス整理で普通に飛ぶ）。
-                guard let self, self.isTapInstalled else { return }
-                self.onConfigurationChange?()
-            }
-        }
-    }
-
     deinit {
         if let configurationObserver {
             NotificationCenter.default.removeObserver(configurationObserver)
@@ -101,6 +98,15 @@ final class AudioRecorder {
         teardown()
 
         buffer.withLock { $0 = TapBuffer() }
+        restartCount = 0
+        try startEngine()
+    }
+
+    /// 新しいエンジンを作り、その時点の既定入力に tap を張って動かす。
+    /// 蓄積済みのサンプルには触らない（作り直しの前後で音声をつなぐため）。
+    private func startEngine() throws {
+        engine = AVAudioEngine()
+        observeConfigurationChange(of: engine)
 
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
@@ -136,6 +142,45 @@ final class AudioRecorder {
             // ここで外さないと tap が残り、次の start() で落ちる。
             teardown()
             throw error
+        }
+        Log.audio.info("入力 \(Int(inputFormat.sampleRate), privacy: .public)Hz / \(inputFormat.channelCount, privacy: .public)ch で録音を始めました")
+    }
+
+    /// 通知は今のエンジンからだけ受ける（捨てたエンジンの通知で今の録音を触らない）。
+    private func observeConfigurationChange(of engine: AVAudioEngine) {
+        if let configurationObserver {
+            NotificationCenter.default.removeObserver(configurationObserver)
+        }
+        configurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            // `queue: .main` を指定しているのでこのブロックはメインスレッドで届く。
+            // ブロック自体は @Sendable なので、隔離済みであることを明示してから触る。
+            MainActor.assumeIsolated {
+                // 録音していないときの切り替えは扱わない（起動時やデバイス整理で普通に飛ぶ）。
+                guard let self, self.isTapInstalled else { return }
+                self.handleConfigurationChange()
+            }
+        }
+    }
+
+    /// 録音中に構成が変わった。エンジンは止まっているので、作り直して録り続ける。
+    private func handleConfigurationChange() {
+        teardown()
+        restartCount += 1
+        guard restartCount <= Self.maxRestarts else {
+            Log.audio.notice("録音中にオーディオデバイスが繰り返し変わったため録り直しをやめます")
+            onConfigurationChange?()
+            return
+        }
+        do {
+            try startEngine()
+            Log.audio.notice("録音中にオーディオデバイスが変わったので、新しい入力で録り続けます")
+        } catch {
+            Log.audio.error("デバイスの切り替え後に録音を再開できませんでした: \(error.localizedDescription, privacy: .public)")
+            onConfigurationChange?()
         }
     }
 
