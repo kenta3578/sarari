@@ -128,7 +128,7 @@ final class AppController {
             Task { @MainActor in self?.handleAudioConfigurationChange() }
         }
         recorder.onRestart = { [weak self] in
-            Task { @MainActor in self?.replayStartSoundIfJustStarted() }
+            Task { @MainActor in await self?.replayStartSoundIfJustStarted() }
         }
         hud.onStop = { [weak self] in self?.stopRecording() }
         hud.onCancel = { [weak self] in self?.cancelRecording() }
@@ -554,10 +554,14 @@ final class AppController {
     /// Bluetooth ヘッドセットはマイクを開いて 150ms ほどで通話用に切り替わり、出力も作り直す。
     /// 録音と同時に鳴らした開始音はその間に消えて聞こえない（Issue #139）。
     /// 録り始めて時間がたってからの切り替え（途中で AirPods をつないだ等）では鳴らさない。
-    private func replayStartSoundIfJustStarted() {
+    private func replayStartSoundIfJustStarted() async {
         guard state.isRecording,
               let startedAt = recordingStartedAt,
               Date().timeIntervalSince(startedAt) < Self.startSoundReplayWindow else { return }
+        // 作り直した直後はまだ通話用の接続を張っている途中で、すぐ鳴らすと消えることがある。
+        try? await Task.sleep(for: .seconds(Self.startSoundReplayDelay))
+        // 待つあいだに止めた・次の録音を始めたなら鳴らさない。
+        guard state.isRecording, recordingStartedAt == startedAt else { return }
         let soundDuration = SoundPlayer.play(SettingsStore.shared.startSound)
         guard soundDuration > 0 else { return }
         Log.audio.info("入力の切り替えで消えた開始音を鳴らし直しました")
@@ -571,6 +575,8 @@ final class AppController {
 
     /// 開始音を鳴らし直す、録り始めからの時間。実測の切り替えは 150ms 前後。
     private static let startSoundReplayWindow: TimeInterval = 1.0
+    /// 作り直してから鳴らし直すまでの待ち。接続を張り終えるのを待つ。
+    private static let startSoundReplayDelay: TimeInterval = 0.4
 
     /// 録音中にオーディオデバイスの構成が変わった。AVAudioEngine は既に止まっていて
     /// 以降の音は入らないので、ここで締めて途中までの音声を処理する（Issue #77）。
