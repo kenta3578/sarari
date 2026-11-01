@@ -44,6 +44,10 @@ final class AudioRecorder {
 
     /// 今の録音で、構成の変化からエンジンを作り直した回数。上限を超えたら締める。
     private var restartCount = 0
+
+    /// 録音に使うマイクの UID（Issue #140）。nil ならシステムの既定の入力。
+    /// 録音を始める前に呼ぶ側が設定する。
+    var preferredInputUID: String?
     /// 1 回の録音で作り直してよい回数。Bluetooth は開始時の 1 回で足りる。
     /// 何度も続くのは抜き差しを繰り返しているなど、録り続けても意味がない状況。
     private static let maxRestarts = 3
@@ -119,6 +123,8 @@ final class AudioRecorder {
         observeConfigurationChange(of: engine)
 
         let input = engine.inputNode
+        // フォーマットを読む前に向け先を決める（読んだあとに変えると前のデバイスの形式が残る）。
+        selectPreferredInput(of: input)
         let inputFormat = input.outputFormat(forBus: 0)
         // 入力デバイスが無いと sampleRate 0 / channelCount 0 が返る。検証せずに
         // installTap へ渡すと AVAudioEngine が不正フォーマットで例外を投げる（Issue #77）。
@@ -154,6 +160,23 @@ final class AudioRecorder {
             throw error
         }
         Log.audio.info("入力 \(Int(inputFormat.sampleRate), privacy: .public)Hz / \(inputFormat.channelCount, privacy: .public)ch で録音を始めました")
+    }
+
+    /// 設定で選んだマイクに入力を向ける。つながっていない・向けられないときはシステムの既定のまま。
+    private func selectPreferredInput(of input: AVAudioInputNode) {
+        guard let uid = preferredInputUID else { return }
+        guard let device = InputDevices.deviceID(uid: uid) else {
+            Log.audio.notice("設定したマイクがつながっていないため、システムの設定のマイクで録ります")
+            return
+        }
+        guard let unit = input.audioUnit else { return }
+        var id = device
+        let status = AudioUnitSetProperty(
+            unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
+            &id, UInt32(MemoryLayout<AudioDeviceID>.size))
+        if status != noErr {
+            Log.audio.error("設定したマイクに切り替えられませんでした（\(status, privacy: .public)）。システムの設定のマイクで録ります")
+        }
     }
 
     /// 通知は今のエンジンからだけ受ける（捨てたエンジンの通知で今の録音を触らない）。
