@@ -32,7 +32,7 @@ final class AudioRecorder {
     /// オーディオスレッドとメインスレッドが共有する唯一の状態。
     /// `OSAllocatedUnfairLock` は State が Sendable なら自身も Sendable なので、
     /// `@unchecked` を書かずに tap ブロックへ渡せる。
-    private struct TapBuffer {
+    fileprivate struct TapBuffer {
         var samples: [Float] = []
         var lastLevelSentAt: CFAbsoluteTime = 0
     }
@@ -48,6 +48,11 @@ final class AudioRecorder {
     /// 録音に使うマイクの UID（Issue #140）。nil ならシステムの既定の入力。
     /// 録音を始める前に呼ぶ側が設定する。
     var preferredInputUID: String?
+
+    /// 選んだマイクで録っているあいだの AVCaptureSession と受け口（`receiver` は弱参照で渡すので持っておく）。
+    private var capture: (session: AVCaptureSession, receiver: CaptureReceiver)?
+    private var captureObserver: NSObjectProtocol?
+    private let captureQueue = DispatchQueue(label: "sarari.capture")
     /// 1 回の録音で作り直してよい回数。Bluetooth は開始時の 1 回で足りる。
     /// 何度も続くのは抜き差しを繰り返しているなど、録り続けても意味がない状況。
     private static let maxRestarts = 3
@@ -113,7 +118,68 @@ final class AudioRecorder {
 
         buffer.withLock { $0 = TapBuffer() }
         restartCount = 0
-        try startEngine()
+        if let uid = preferredCaptureUID() {
+            try startCapture(uid: uid)
+        } else {
+            try startEngine()
+        }
+    }
+
+    /// 設定で選んだマイクを AVCaptureSession で開くべきなら、その UID。
+    ///
+    /// **既定以外のマイクは AVAudioEngine で録れない。** 入力を向け直すとエンジンが止まり、
+    /// 開始し直すと既定のデバイスへ戻る（Bluetooth ヘッドホンが既定のとき実測。Issue #143）。
+    /// AVCaptureSession はデバイスを指定して開け、出力側に触らないので、ヘッドホンも通話用に切り替わらない。
+    /// 既定と同じデバイスなら今までどおり AVAudioEngine で録る。
+    private func preferredCaptureUID() -> String? {
+        guard let uid = preferredInputUID else { return nil }
+        guard let device = InputDevices.deviceID(uid: uid) else {
+            Log.audio.notice("設定したマイクがつながっていないため、システムの設定のマイクで録ります")
+            return nil
+        }
+        return device == InputDevices.defaultInputID() ? nil : uid
+    }
+
+    /// 選んだマイクを AVCaptureSession で開く。16kHz / mono / Float32 で受け取るので変換は要らない。
+    private func startCapture(uid: String) throws {
+        guard let device = AVCaptureDevice(uniqueID: uid) else {
+            throw AudioRecorderError.noInputDevice
+        }
+        let session = AVCaptureSession()
+        let input = try AVCaptureDeviceInput(device: device)
+        guard session.canAddInput(input) else { throw AudioRecorderError.noInputDevice }
+        session.addInput(input)
+
+        let output = AVCaptureAudioDataOutput()
+        output.audioSettings = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: Double(Self.sampleRate),
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsNonInterleaved: false,
+            AVLinearPCMIsBigEndianKey: false,
+        ]
+        let receiver = CaptureReceiver(sink: buffer, onLevel: onLevel)
+        output.setSampleBufferDelegate(receiver, queue: captureQueue)
+        guard session.canAddOutput(output) else { throw AudioRecorderError.noInputDevice }
+        session.addOutput(output)
+
+        // 録音中に抜かれたら締める（録り続けられない）。
+        captureObserver = NotificationCenter.default.addObserver(
+            forName: AVCaptureDevice.wasDisconnectedNotification,
+            object: device,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.capture != nil else { return }
+                Log.audio.notice("録音中に選んだマイクが外れました")
+                self.onConfigurationChange?()
+            }
+        }
+        session.startRunning()
+        capture = (session, receiver)
+        Log.audio.info("選んだマイク（\(device.localizedName, privacy: .public)）で録音を始めました")
     }
 
     /// 新しいエンジンを作り、その時点の既定入力に tap を張って動かす。
@@ -123,8 +189,6 @@ final class AudioRecorder {
         observeConfigurationChange(of: engine)
 
         let input = engine.inputNode
-        // フォーマットを読む前に向け先を決める（読んだあとに変えると前のデバイスの形式が残る）。
-        selectPreferredInput(of: input)
         let inputFormat = input.outputFormat(forBus: 0)
         // 入力デバイスが無いと sampleRate 0 / channelCount 0 が返る。検証せずに
         // installTap へ渡すと AVAudioEngine が不正フォーマットで例外を投げる（Issue #77）。
@@ -160,30 +224,6 @@ final class AudioRecorder {
             throw error
         }
         Log.audio.info("入力 \(Int(inputFormat.sampleRate), privacy: .public)Hz / \(inputFormat.channelCount, privacy: .public)ch で録音を始めました")
-    }
-
-    /// 設定で選んだマイクに入力を向ける。つながっていない・向けられないときはシステムの既定のまま。
-    private func selectPreferredInput(of input: AVAudioInputNode) {
-        guard let uid = preferredInputUID else { return }
-        guard let device = InputDevices.deviceID(uid: uid) else {
-            Log.audio.notice("設定したマイクがつながっていないため、システムの設定のマイクで録ります")
-            return
-        }
-        guard let unit = input.audioUnit else { return }
-        // すでに向いているなら触らない。向け直すだけで構成変更の通知が出て、
-        // 作り直し → 向け直し → 通知 を繰り返す（Issue #143）。
-        var current = AudioDeviceID(0)
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        if AudioUnitGetProperty(unit, kAudioOutputUnitProperty_CurrentDevice,
-                                kAudioUnitScope_Global, 0, &current, &size) == noErr,
-           current == device { return }
-        var id = device
-        let status = AudioUnitSetProperty(
-            unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
-            &id, UInt32(MemoryLayout<AudioDeviceID>.size))
-        if status != noErr {
-            Log.audio.error("設定したマイクに切り替えられませんでした（\(status, privacy: .public)）。システムの設定のマイクで録ります")
-        }
     }
 
     /// 通知は今のエンジンからだけ受ける（捨てたエンジンの通知で今の録音を触らない）。
@@ -239,6 +279,14 @@ final class AudioRecorder {
 
     /// tap とエンジンを素の状態へ戻す。**何度呼んでも安全**であることが要件。
     private func teardown() {
+        if let capture {
+            capture.session.stopRunning()
+            self.capture = nil
+        }
+        if let captureObserver {
+            NotificationCenter.default.removeObserver(captureObserver)
+            self.captureObserver = nil
+        }
         if isTapInstalled {
             engine.inputNode.removeTap(onBus: 0)
             isTapInstalled = false
@@ -246,7 +294,7 @@ final class AudioRecorder {
         if engine.isRunning { engine.stop() }
     }
 
-    private static func append(_ buffer: AVAudioPCMBuffer,
+    private nonisolated static func append(_ buffer: AVAudioPCMBuffer,
                                using converter: AVAudioConverter,
                                target targetFormat: AVAudioFormat,
                                into sink: OSAllocatedUnfairLock<TapBuffer>,
@@ -277,7 +325,13 @@ final class AudioRecorder {
         }
         let frames = Int(out.frameLength)
         let chunk = Array(UnsafeBufferPointer(start: channel[0], count: frames))
+        store(chunk, into: sink, onLevel: onLevel)
+    }
 
+    /// 16kHz / mono のサンプルを溜め、間引いてレベルを通知する。オーディオスレッドから呼ぶ。
+    fileprivate nonisolated static func store(_ chunk: [Float],
+                                              into sink: OSAllocatedUnfairLock<TapBuffer>,
+                                              onLevel: (@Sendable (Float) -> Void)?) {
         // 蓄積とレベル通知の間引き判定を 1 回のロックで済ませる。
         let shouldEmit = sink.withLock { state -> Bool in
             state.samples.append(contentsOf: chunk)
@@ -291,11 +345,39 @@ final class AudioRecorder {
     }
 
     /// 直近チャンクの RMS を 0…1 に正規化して通知する。間引きの判定は呼ぶ側で済ませてある。
-    private static func emitLevel(_ chunk: [Float], to onLevel: @escaping @Sendable (Float) -> Void) {
+    private nonisolated static func emitLevel(_ chunk: [Float], to onLevel: @escaping @Sendable (Float) -> Void) {
         guard !chunk.isEmpty else { return }
 
         let level = AudioLevel.normalized(rms: AudioLevel.rms(chunk[...]))
 
         DispatchQueue.main.async { onLevel(level) }
+    }
+}
+
+/// AVCaptureSession から 16kHz / mono / Float32 のサンプルを受け取り、録音の箱へ溜める。
+/// 持つのは Sendable な値だけ（ロック付きの箱と通知先）で、録音機本体には触らない。
+private final class CaptureReceiver: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, Sendable {
+    private let sink: OSAllocatedUnfairLock<AudioRecorder.TapBuffer>
+    private let onLevel: (@Sendable (Float) -> Void)?
+
+    init(sink: OSAllocatedUnfairLock<AudioRecorder.TapBuffer>, onLevel: (@Sendable (Float) -> Void)?) {
+        self.sink = sink
+        self.onLevel = onLevel
+    }
+
+    func captureOutput(_ output: AVCaptureOutput,
+                       didOutput sampleBuffer: CMSampleBuffer,
+                       from connection: AVCaptureConnection) {
+        var list = AudioBufferList()
+        var block: CMBlockBuffer?
+        let status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
+            sampleBuffer, bufferListSizeNeededOut: nil, bufferListOut: &list,
+            bufferListSize: MemoryLayout<AudioBufferList>.size,
+            blockBufferAllocator: nil, blockBufferMemoryAllocator: nil,
+            flags: 0, blockBufferOut: &block)
+        guard status == noErr, let data = list.mBuffers.mData else { return }
+        let count = Int(list.mBuffers.mDataByteSize) / MemoryLayout<Float>.size
+        let chunk = Array(UnsafeBufferPointer(start: data.assumingMemoryBound(to: Float.self), count: count))
+        AudioRecorder.store(chunk, into: sink, onLevel: onLevel)
     }
 }

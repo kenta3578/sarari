@@ -25,6 +25,20 @@ enum InputDevices {
         deviceIDs().first { self.uid(of: $0) == uid && hasInput($0) }
     }
 
+    /// システムの既定の入力デバイス。
+    nonisolated static func defaultInputID() -> AudioDeviceID? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var device = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device) == noErr,
+              device != kAudioObjectUnknown else { return nil }
+        return device
+    }
+
     // MARK: CoreAudio
 
     private nonisolated static func deviceIDs() -> [AudioDeviceID] {
