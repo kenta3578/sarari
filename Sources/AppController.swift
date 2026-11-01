@@ -42,6 +42,8 @@ final class AppController {
     /// この録音の先頭で開始音が鳴っている長さ（余裕込み）。マイクが拾った開始音を、
     /// 無音の判定に入れないために使う（Issue #122）。停止処理で読んで 0 に戻す。
     private var startSoundSeconds: TimeInterval = 0
+    /// 今の録音を始めた時刻。開始音を鳴らし直すかの判定にだけ使う。
+    private var recordingStartedAt: Date?
     /// 追い越しの判定と、見せ損ねた結果の退避（Issue #97 / #100）。
     /// 判定そのものは `PipelineGuard` に閉じていて、AppKit 無しで単体テストできる（Issue #102）。
     private var guardState = PipelineGuard()
@@ -124,6 +126,9 @@ final class AppController {
         // 以降の音が入らない。黙って欠けたまま挿入しないよう、その場で締める（Issue #77）。
         recorder.onConfigurationChange = { [weak self] in
             Task { @MainActor in self?.handleAudioConfigurationChange() }
+        }
+        recorder.onRestart = { [weak self] in
+            Task { @MainActor in await self?.replayStartSoundIfJustStarted() }
         }
         hud.onStop = { [weak self] in self?.stopRecording() }
         hud.onCancel = { [weak self] in self?.cancelRecording() }
@@ -253,6 +258,7 @@ final class AppController {
         let generation = guardState.begin()
         do {
             try recorder.start()
+            recordingStartedAt = Date()
             state.update(.recording)
             scheduleRecordingLimit(generation: generation)
             // 表示サイズ（非表示/最小/通常）の判断は HUD 側に一本化してある。
@@ -291,6 +297,7 @@ final class AppController {
         recordingLimitReached = false
         let leadingSound = startSoundSeconds
         startSoundSeconds = 0
+        recordingStartedAt = nil
         cancelRecordingLimit()
 
         launchPipeline(samples: samples,
@@ -541,6 +548,35 @@ final class AppController {
         recordingLimitReached = true
         stopRecording()
     }
+
+    /// 録り始めてすぐに入力が切り替わったら、開始音を鳴らし直す。
+    ///
+    /// Bluetooth ヘッドセットはマイクを開いて 150ms ほどで通話用に切り替わり、出力も作り直す。
+    /// 録音と同時に鳴らした開始音はその間に消えて聞こえない（Issue #139）。
+    /// 録り始めて時間がたってからの切り替え（途中で AirPods をつないだ等）では鳴らさない。
+    private func replayStartSoundIfJustStarted() async {
+        guard state.isRecording,
+              let startedAt = recordingStartedAt,
+              Date().timeIntervalSince(startedAt) < Self.startSoundReplayWindow else { return }
+        // 作り直した直後はまだ通話用の接続を張っている途中で、すぐ鳴らすと消えることがある。
+        try? await Task.sleep(for: .seconds(Self.startSoundReplayDelay))
+        // 待つあいだに止めた・次の録音を始めたなら鳴らさない。
+        guard state.isRecording, recordingStartedAt == startedAt else { return }
+        let soundDuration = SoundPlayer.play(SettingsStore.shared.startSound)
+        guard soundDuration > 0 else { return }
+        Log.audio.info("入力の切り替えで消えた開始音を鳴らし直しました")
+        hud.ignoreLevels(forSoundOf: soundDuration)
+        // 鳴らし直した音も録音に入るので、無音の判定から外す区間をそこまで延ばす。
+        startSoundSeconds = SilenceGate.excludedSeconds(
+            forSoundOf: recorder.recordedSeconds + soundDuration)
+        // 下げるのも鳴らし直した音のあとにする（先に下げると聞こえない）。
+        ducker.lower(after: soundDuration)
+    }
+
+    /// 開始音を鳴らし直す、録り始めからの時間。実測の切り替えは 150ms 前後。
+    private static let startSoundReplayWindow: TimeInterval = 1.0
+    /// 作り直してから鳴らし直すまでの待ち。接続を張り終えるのを待つ。
+    private static let startSoundReplayDelay: TimeInterval = 0.4
 
     /// 録音中にオーディオデバイスの構成が変わった。AVAudioEngine は既に止まっていて
     /// 以降の音は入らないので、ここで締めて途中までの音声を処理する（Issue #77）。
