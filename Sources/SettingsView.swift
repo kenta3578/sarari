@@ -25,6 +25,8 @@ struct GeneralSettingsView: View {
     /// ホットキーの録り中か（AppState の録音状態とは無関係）。
     /// ウィンドウを閉じても監視が残らないよう、状態は View の外に置く（Issue #78）。
     @ObservedObject private var hotKeyCapture = HotKeyCapture.shared
+    /// 録音に使うマイクの選択肢（Issue #140）。
+    @ObservedObject private var inputDevices = InputDeviceList.shared
     /// 履歴の全削除は取り消せないので必ず確認する（Issue #81）。
     @State private var isConfirmingDeleteAll = false
     /// 取り込んだ音の一覧（Issue #124）。取り込み・削除の直後に選択肢へ反映するため
@@ -32,6 +34,12 @@ struct GeneralSettingsView: View {
     @State private var customSounds: [String] = SoundPlayer.customSounds()
     /// 取り込みに失敗したファイルの理由（成功したら消す）。
     @State private var soundImportError: String?
+
+    /// 選んだマイクがつながっているか。「システムの設定に従う」なら true。
+    private var isInputConnected: Bool {
+        guard let uid = settings.inputDeviceUID else { return true }
+        return inputDevices.devices.contains { $0.uid == uid }
+    }
 
     var body: some View {
         Form {
@@ -81,6 +89,33 @@ struct GeneralSettingsView: View {
                         .foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+
+            Section("マイク") {
+                Picker("録音に使うマイク", selection: Binding(
+                    get: { settings.inputDeviceUID },
+                    set: { uid in
+                        settings.inputDeviceUID = uid
+                        settings.inputDeviceName = inputDevices.devices.first { $0.uid == uid }?.name
+                    }
+                )) {
+                    Text("システムの設定に従う").tag(String?.none)
+                    ForEach(inputDevices.devices) { device in
+                        Text(device.name).tag(String?.some(device.uid))
+                    }
+                    // 選んだマイクを外していても、選択が消えて見えないように残す。
+                    if let uid = settings.inputDeviceUID, !isInputConnected {
+                        Text("\(settings.inputDeviceName ?? "選んだマイク")（つながっていません）")
+                            .tag(String?.some(uid))
+                    }
+                }
+                Text(isInputConnected
+                     ? "sarari だけがこのマイクを使います。ほかのアプリのマイクは変わりません。"
+                       + "Bluetooth ヘッドホンをつけたまま Mac のマイクを選ぶと、ヘッドホンが通話用に切り替わらず音質が落ちません。"
+                     : "選んだマイクがつながっていないので、システムの設定のマイクで録ります。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("サウンド") {
