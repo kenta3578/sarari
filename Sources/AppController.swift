@@ -257,7 +257,6 @@ final class AppController {
         }
         let generation = guardState.begin()
         do {
-            recorder.preferredInputUID = SettingsStore.shared.inputDeviceUID
             try recorder.start()
             recordingStartedAt = Date()
             state.update(.recording)

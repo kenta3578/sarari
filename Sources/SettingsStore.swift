@@ -34,15 +34,6 @@ final class SettingsStore: ObservableObject {
     @Published var lowerVolumeWhileRecording: Bool {
         didSet { UserDefaults.standard.set(lowerVolumeWhileRecording, forKey: "lowerVolumeWhileRecording") }
     }
-    /// 録音に使うマイクの UID（Issue #140）。nil ならシステムの設定に従う。
-    /// ヘッドホンをつけたまま Mac のマイクで録る（ヘッドホンを通話用に切り替えない）ために使う。
-    @Published var inputDeviceUID: String? {
-        didSet { UserDefaults.standard.set(inputDeviceUID, forKey: "inputDeviceUID") }
-    }
-    /// 選んだマイクの名前。つながっていないときに設定画面で名前を出すためだけに持つ。
-    @Published var inputDeviceName: String? {
-        didSet { UserDefaults.standard.set(inputDeviceName, forKey: "inputDeviceName") }
-    }
     /// 挿入できなかった結果をどこに残すか（Issue #67）。
     ///
     /// 以前は `showResultPanel` と `keepResultOnClipboardWhenUnsure` の 2 つの Bool に
@@ -164,8 +155,6 @@ final class SettingsStore: ObservableObject {
         lowerVolumeWhileRecording = UserDefaults.standard.object(forKey: "lowerVolumeWhileRecording") as? Bool
             ?? UserDefaults.standard.bool(forKey: "pauseMediaWhileRecording")
         resultRetention = Self.storedResultRetention()
-        inputDeviceUID = UserDefaults.standard.string(forKey: "inputDeviceUID")
-        inputDeviceName = UserDefaults.standard.string(forKey: "inputDeviceName")
         let storedExtra = (UserDefaults.standard.object(forKey: "hotKeyExtraKeyCode") as? Int).flatMap(UInt16.init(exactly:))
         let storedModifiers = Self.storedHotKeyModifiers()
         // 手で書かれた・古いビルドが残した「成立しない組み合わせ」は既定に戻す（誤爆・永久に反応しない を防ぐ）。
